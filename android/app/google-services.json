@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "508070632416",
+    "project_id": "pathone9-ca305",
+    "storage_bucket": "pathone9-ca305.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:508070632416:android:d8e86eca2fb047f5cce985",
+        "android_client_info": {
+          "package_name": "com.example.pathone9"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "508070632416-q6l16o8bs05qsp3fs91u2a18thiqrd3h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pathone9",
+            "certificate_hash": "ff91d3c15d0c7cc5f25baabb2b7b265ba5671ebb"
+          }
+        },
+        {
+          "client_id": "508070632416-b84kpqt23n3eos9omfrlpf1s3ellufhp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAORELOiXVyfauXv8tneSAmIDqBCQd3ch8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "508070632416-b84kpqt23n3eos9omfrlpf1s3ellufhp.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "508070632416-jhl9e33sdmp6hj6bd5a4fv80d66agv2m.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pathone9"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
