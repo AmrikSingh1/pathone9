@@ -45,26 +45,5 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>com.example.pathone9</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>pathone9</string>
-			</array>
-		</dict>
-	</array>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>phonepe</string>
-		<string>paytm</string>
-		<string>gpay</string>
-		<string>upi</string>
-		<string>bhim</string>
-	</array>
 </dict>
 </plist>
