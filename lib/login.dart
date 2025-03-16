@@ -14,11 +14,13 @@ const Color kLightBlue = Color(0xFF3B82F6); // Light blue for gradients
 class LoginPage extends StatefulWidget {
   final bool isSignUp;
   final bool isFirstLaunch;
+  final bool showLoginContent;
 
   const LoginPage({
     super.key,
     this.isSignUp = false,
     this.isFirstLaunch = false,
+    this.showLoginContent = false,
   });
 
   @override
@@ -115,7 +117,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
 
     _keyboardAnimController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 500), // Increased from 300 to 500 for smoother animation
       vsync: this,
     );
 
@@ -127,7 +129,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     // Now set up the animations and listeners
     _isLogin = !widget.isSignUp;
-    _showLoginContent = !widget.isFirstLaunch;
+    _showLoginContent = widget.showLoginContent || !widget.isFirstLaunch;
 
     // Initialize fade animation for Get Started page
     _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
@@ -330,9 +332,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       if (_forgotPasswordStep == 1) {
         final phoneNumber = '$_selectedCountryCode${_phoneController.text}';
         
-        setState(() {
-          _formContentOpacity = 0.0;
-        });
+      setState(() {
+        _formContentOpacity = 0.0;
+      });
         
         // Firebase phone verification for password reset
         _auth.verifyPhoneNumber(
@@ -366,13 +368,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           codeSent: (String verificationId, int? resendToken) {
             if (mounted) {
               _verificationId = verificationId;
-              
-              Future.delayed(const Duration(milliseconds: 300), () {
-                setState(() {
-                  _forgotPasswordStep++;
-                  _formContentOpacity = 1.0;
-                });
-              });
+
+      Future.delayed(const Duration(milliseconds: 300), () {
+        setState(() {
+          _forgotPasswordStep++;
+          _formContentOpacity = 1.0;
+        });
+      });
               
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -449,11 +451,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       if (user != null) {
         // Update password
         user.updatePassword(_newPasswordController.text).then((_) {
-          // Show success message and return to login
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Password reset successful! Please login with your new password.'),
-              backgroundColor: Colors.green,
+      // Show success message and return to login
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password reset successful! Please login with your new password.'),
+          backgroundColor: Colors.green,
             ),
           );
           _returnToLogin();
@@ -472,9 +474,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           const SnackBar(
             content: Text('Authentication error. Please try again.'),
             backgroundColor: Colors.red,
-          ),
-        );
-        _returnToLogin();
+        ),
+      );
+      _returnToLogin();
       }
     }
   }
@@ -593,11 +595,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           
           // Save user data in SharedPreferences
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_id', mockUserId);
+          
+          // Get the current user ID (could be from Google sign-in)
+          final userId = prefs.getString('user_id') ?? mockUserId;
+          
+          // Save the user ID (if not already saved)
+          await prefs.setString('user_id', userId);
+          
+          // If this is a Google user completing their profile, mark it as completed
+          final currentUser = _auth.currentUser;
+          if (currentUser != null && currentUser.providerData.any((info) => 
+              info.providerId == 'google.com')) {
+            await prefs.setBool('google_profile_completed_$userId', true);
+          }
           
           // For login flow, check if user has already selected a membership
-          final existingMembership = prefs.getString('user_membership');
-          final isNewUser = _isLogin ? false : true;
+          final hasMembership = prefs.getBool('has_membership') ?? false;
+          final isNewUser = !_isLogin;
           
           if (mounted) {
             if (isNewUser) {
@@ -605,18 +619,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               Navigator.pushReplacementNamed(
                 context, 
                 '/membership',
-                arguments: mockUserId,
               );
             } else {
-              if (existingMembership != null) {
-                // Returning user with membership - go directly to home
-                Navigator.pushReplacementNamed(context, '/home');
+              if (hasMembership) {
+                // Returning user with membership - go directly to homepage
+                Navigator.pushReplacementNamed(context, '/homepage');
               } else {
                 // Returning user without membership - go to membership selection
                 Navigator.pushReplacementNamed(
                   context, 
                   '/membership',
-                  arguments: mockUserId,
                 );
               }
             }
@@ -814,10 +826,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     // Check if keyboard is visible and animate accordingly
     if (keyboardHeight > 0 && !_isKeyboardVisible) {
       _isKeyboardVisible = true;
-      _keyboardAnimController.forward();
+      _keyboardAnimController.forward(from: _keyboardAnimController.value);
     } else if (keyboardHeight == 0 && _isKeyboardVisible) {
       _isKeyboardVisible = false;
-      _keyboardAnimController.reverse();
+      _keyboardAnimController.reverse(from: _keyboardAnimController.value);
     }
 
     // Calculate container height based on animation state and form type
@@ -828,8 +840,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         : (isSmallScreen ? screenHeight * 0.85 : screenHeight * 0.88); // Increased from 0.82 to 0.85 for small screens
     final containerHeight = optionsHeight + (loginFormHeight - optionsHeight) * _containerExpandPosition;
 
-    // Calculate keyboard slide offset
-    final keyboardSlideAmount = screenHeight * 0.2 * _keyboardSlideOffset;
+    // Calculate keyboard slide offset - make it negative to move down instead of up
+    final keyboardSlideAmount = -screenHeight * 0.16 * CurvedAnimation(
+      parent: _keyboardAnimController,
+      curve: Curves.easeInOutCubic, // Use a smoother curve for keyboard animation
+    ).value;
 
     // Calculate responsive padding and spacing
     final horizontalPadding = screenWidth * 0.06; // 6% of screen width
@@ -979,11 +994,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           if (_showOptionsContainer || _showLoginContent)
             Positioned(
               // Position the container with keyboard awareness and form type
-              // Move the container higher by increasing the negative offset
+              // Reduce the negative offset to prevent container from moving too high
               bottom: -screenHeight * 0.036 * _containerSlidePosition +
-                  (_containerExpandPosition * -screenHeight * 0.072) +
+                  (_containerExpandPosition * -screenHeight * 0.05) + // Reduced from 0.072 to 0.05
                   keyboardSlideAmount +
-                  _formContentOffset - screenHeight * 0.01, // Increased negative offset from 0.06 to 0.08
+                  _formContentOffset - screenHeight * 0.01,
               left: 0,
               right: 0,
               child: GestureDetector(
@@ -1242,7 +1257,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                                 }
                                                     if (!_isPhoneVerified) {
                                                       return 'Please verify your phone number';
-                                                    }
+                                                }
                                                 return null;
                                               },
                                               keyboardType: TextInputType.phone,
@@ -2045,42 +2060,42 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                     width: double.infinity,
                                     margin: EdgeInsets.only(bottom: screenHeight * 0.03), // Added margin to ensure visibility
                                     child: Center(
-                                      child: Padding(
+                                    child: Padding(
                                         padding: const EdgeInsets.symmetric(vertical: 4), // Reduced from 6
-                                        child: TextButton(
-                                          onPressed: _switchMode,
-                                          style: TextButton.styleFrom(
+                                      child: TextButton(
+                                        onPressed: _switchMode,
+                                        style: TextButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 20), // Reduced padding
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
                                           ),
-                                          child: RichText(
-                                            text: TextSpan(
+                                        ),
+                                        child: RichText(
+                                          text: TextSpan(
                                               style: TextStyle(
                                                 fontSize: isSmallScreen ? 14 : 16, // Smaller font on small screens
-                                                fontWeight: FontWeight.w400,
-                                                fontFamily: 'Inter',
-                                                color: Color(0xFF6B7280),
-                                                height: 1.5,
-                                              ),
-                                              children: [
-                                                TextSpan(
-                                                  text: _isLogin ? 'Don\'t have an account? ' : 'Already have an account? ',
-                                                ),
-                                                TextSpan(
-                                                  text: _isLogin ? 'Sign Up' : 'Login',
-                                                  style: const TextStyle(
-                                                    color: kPrimaryBlue,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ],
+                                              fontWeight: FontWeight.w400,
+                                              fontFamily: 'Inter',
+                                              color: Color(0xFF6B7280),
+                                              height: 1.5,
                                             ),
+                                            children: [
+                                              TextSpan(
+                                                text: _isLogin ? 'Don\'t have an account? ' : 'Already have an account? ',
+                                              ),
+                                              TextSpan(
+                                                text: _isLogin ? 'Sign Up' : 'Login',
+                                                style: const TextStyle(
+                                                  color: kPrimaryBlue,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
                                     ),
+                                  ),
                                   ),
                                 ],
                               ),
@@ -2097,130 +2112,130 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                 vertical: isSmallScreen ? verticalSpacing * 0.6 : verticalSpacing, // Reduced padding further
                                 horizontal: horizontalPadding * 0.5,
                               ),
-                              child: Column(
-                                children: [
-                                  ShaderMask(
-                                    shaderCallback: (bounds) => LinearGradient(
+                          child: Column(
+                            children: [
+                              ShaderMask(
+                                shaderCallback: (bounds) => LinearGradient(
+                                  colors: [
+                                    kPrimaryBlue,
+                                    kSecondaryBlue,
+                                    kLightBlue,
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ).createShader(bounds),
+                                child: Text(
+                                  '',
+                                  style: TextStyle(
+                                        fontSize: isSmallScreen ? 20 : 22,
+                                    fontWeight: FontWeight.w700,
+                                    fontFamily: 'Inter',
+                                    color: const Color(0xFF1F2937),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                                  SizedBox(height: verticalSpacing * 0.8), // Reduced from verticalSpacing
+                              Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                                child: Container(
+                                      height: buttonHeight * 0.9, // Reduced button height
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
                                       colors: [
                                         kPrimaryBlue,
                                         kSecondaryBlue,
                                         kLightBlue,
                                       ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ).createShader(bounds),
-                                    child: Text(
-                                      'Choose an Option',
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: kPrimaryBlue.withOpacity(0.5),
+                                        blurRadius: 15,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                  child: ElevatedButton(
+                                    onPressed: () => _navigateToLoginContent(isLoginMode: true),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      foregroundColor: Colors.white,
+                                      shadowColor: Colors.transparent,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                        child: Text(
+                                      'Login',
                                       style: TextStyle(
-                                        fontSize: isSmallScreen ? 20 : 22,
+                                            fontSize: isSmallScreen ? 16 : 18,
                                         fontWeight: FontWeight.w700,
                                         fontFamily: 'Inter',
-                                        color: const Color(0xFF1F2937),
+                                        color: Colors.white,
                                         letterSpacing: 0.5,
                                       ),
                                     ),
                                   ),
+                                ),
+                              ),
                                   SizedBox(height: verticalSpacing * 0.8), // Reduced from verticalSpacing
-                                  Padding(
+                              Padding(
                                     padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                                    child: Container(
+                                child: Container(
                                       height: buttonHeight * 0.9, // Reduced button height
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(16),
-                                        gradient: const LinearGradient(
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                          colors: [
-                                            kPrimaryBlue,
-                                            kSecondaryBlue,
-                                            kLightBlue,
-                                          ],
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: kPrimaryBlue.withOpacity(0.5),
-                                            blurRadius: 15,
-                                            spreadRadius: 1,
-                                          ),
-                                        ],
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        kPrimaryBlue,
+                                        kSecondaryBlue,
+                                        kLightBlue,
+                                      ],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: kPrimaryBlue.withOpacity(0.5),
+                                        blurRadius: 15,
+                                        spreadRadius: 1,
                                       ),
-                                      child: ElevatedButton(
-                                        onPressed: () => _navigateToLoginContent(isLoginMode: true),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.transparent,
-                                          foregroundColor: Colors.white,
-                                          shadowColor: Colors.transparent,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                        ),
+                                    ],
+                                  ),
+                                  child: ElevatedButton(
+                                    onPressed: () => _navigateToLoginContent(isLoginMode: false),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      foregroundColor: Colors.white,
+                                      shadowColor: Colors.transparent,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                    ),
                                         child: Text(
-                                          'Login',
-                                          style: TextStyle(
+                                      'Sign Up',
+                                      style: TextStyle(
                                             fontSize: isSmallScreen ? 16 : 18,
-                                            fontWeight: FontWeight.w700,
-                                            fontFamily: 'Inter',
-                                            color: Colors.white,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
+                                        fontWeight: FontWeight.w700,
+                                        fontFamily: 'Inter',
+                                        color: Colors.white,
+                                        letterSpacing: 0.5,
                                       ),
                                     ),
                                   ),
-                                  SizedBox(height: verticalSpacing * 0.8), // Reduced from verticalSpacing
-                                  Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                                    child: Container(
-                                      height: buttonHeight * 0.9, // Reduced button height
-                                      width: double.infinity,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(16),
-                                        gradient: const LinearGradient(
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                          colors: [
-                                            kPrimaryBlue,
-                                            kSecondaryBlue,
-                                            kLightBlue,
-                                          ],
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: kPrimaryBlue.withOpacity(0.5),
-                                            blurRadius: 15,
-                                            spreadRadius: 1,
-                                          ),
-                                        ],
-                                      ),
-                                      child: ElevatedButton(
-                                        onPressed: () => _navigateToLoginContent(isLoginMode: false),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.transparent,
-                                          foregroundColor: Colors.white,
-                                          shadowColor: Colors.transparent,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                        child: Text(
-                                          'Sign Up',
-                                          style: TextStyle(
-                                            fontSize: isSmallScreen ? 16 : 18,
-                                            fontWeight: FontWeight.w700,
-                                            fontFamily: 'Inter',
-                                            color: Colors.white,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                ),
+                              ),
                                   // Add bottom padding to ensure content doesn't get cut off
                                   SizedBox(height: verticalSpacing * 0.8), // Reduced from verticalSpacing
-                                ],
+                            ],
                               ),
                             ),
                           ),
@@ -2414,10 +2429,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     ),
                   )
                 : Image.asset(
-                    'assets/images/google_icon.png',
-                    width: 24,
-                    height: 24,
-                  ),
+              'assets/images/google_icon.png',
+              width: 24,
+              height: 24,
+            ),
             const SizedBox(width: 12),
             Text(
               _isGoogleSignInLoading ? 'Signing in...' : 'Continue with Google',
@@ -2445,24 +2460,88 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       final userCredential = await _authService.signInWithGoogle();
       
       if (userCredential != null && mounted) {
-        // Get user ID
+        // Get user ID and user info
         final userId = userCredential.user!.uid;
+        final isNewUser = userCredential.additionalUserInfo?.isNewUser ?? false;
         
         // Save user ID to shared preferences
         final prefs = await SharedPreferences.getInstance();
+        
+        // Check if this Google user has signed in before and completed profile
+        final existingUserId = prefs.getString('user_id');
+        final hasCompletedProfile = prefs.getBool('google_profile_completed_$userId') ?? false;
+        final isReturningUser = existingUserId == userId && hasCompletedProfile;
+        
+        // Always save the user ID
         await prefs.setString('user_id', userId);
         await prefs.setBool('is_first_launch', false);
         
-        // Check if user has selected a membership
-        final hasSelectedMembership = prefs.getString('user_membership') != null;
-        
-        if (mounted) {
-          if (hasSelectedMembership) {
-            // Navigate to home page
-            Navigator.pushReplacementNamed(context, '/home');
-          } else {
-            // Navigate to membership selection page
-            Navigator.pushReplacementNamed(context, '/membership', arguments: userId);
+        // If user is new OR hasn't completed their profile yet, show the account creation form
+        if (isNewUser || !hasCompletedProfile) {
+          if (mounted) {
+            // Pre-fill email if available
+            if (userCredential.user?.email != null) {
+              _emailController.text = userCredential.user!.email!;
+            }
+            
+            // Pre-fill name if available
+            if (userCredential.user?.displayName != null) {
+              _nameController.text = userCredential.user!.displayName!;
+            }
+            
+            // Navigate to sign up form
+            setState(() {
+              _isGoogleSignInLoading = false;
+              _isLogin = false; // Switch to sign up mode
+              _showLoginContent = true;
+              _showOptionsContainer = false;
+              _formContentOpacity = 1.0;
+              _containerExpandPosition = 1.0;
+            });
+            
+            // Ensure content fade controller is at the right value
+            _contentFadeController.value = 1.0;
+            
+            // Adjust container position for sign up form
+            _animateFormContentOffset(30.0);
+            
+            // Start transition animation for background image if not already started
+            if (_transitionController.status != AnimationStatus.completed) {
+              _transitionController.forward();
+            }
+            
+            // Fade out the logo if needed
+            if (_fadeController.status != AnimationStatus.completed) {
+              _fadeController.forward();
+            }
+            
+            // Show a message to complete profile
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Please complete your profile to continue'),
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
+        } else {
+          // For returning Google users, set has_membership to true if not already set
+          // This ensures returning Google users don't see the membership screen again
+          if (isReturningUser) {
+            // If they're a returning user, ensure has_membership is set to true
+            await prefs.setBool('has_membership', true);
+          }
+          
+          // Check if user has selected a membership
+          final hasMembership = prefs.getBool('has_membership') ?? false;
+          
+          if (mounted) {
+            if (hasMembership || isReturningUser) {
+              // Navigate directly to home page for returning users or users with membership
+              Navigator.pushReplacementNamed(context, '/homepage');
+            } else {
+              // Navigate to membership selection page for new users who completed Google sign-in
+              Navigator.pushReplacementNamed(context, '/membership');
+            }
           }
         }
       }
@@ -2473,7 +2552,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         );
       }
     } finally {
-      if (mounted) {
+      if (mounted && _isGoogleSignInLoading) {
         setState(() {
           _isGoogleSignInLoading = false;
         });

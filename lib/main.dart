@@ -61,33 +61,18 @@ class ResponsiveBuilder extends StatelessWidget {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Firebase
   await Firebase.initializeApp();
   
+  // Initialize shared preferences
   final prefs = await SharedPreferences.getInstance();
-  final isFirstLaunch = prefs.getBool('is_first_launch') ?? true;
-  final userId = prefs.getString('user_id');
-  final hasSelectedMembership = prefs.getString('user_membership') != null;
-
-  runApp(MyApp(
-    isFirstLaunch: isFirstLaunch,
-    userId: userId,
-    hasSelectedMembership: hasSelectedMembership,
-  ));
+  
+  runApp(MyApp(prefs: prefs));
 }
 
 class MyApp extends StatelessWidget {
-  final bool isFirstLaunch;
-  final String? userId;
-  final bool hasSelectedMembership;
-
-  const MyApp({
-    super.key, 
-    required this.isFirstLaunch, 
-    this.userId,
-    required this.hasSelectedMembership,
-  });
+  final SharedPreferences prefs;
+  
+  const MyApp({super.key, required this.prefs});
 
   // This widget is the root of your application.
   @override
@@ -148,27 +133,82 @@ class MyApp extends StatelessWidget {
         ),
       ),
       initialRoute: _determineInitialRoute(),
-      routes: {
-        '/': (context) => isFirstLaunch ? const LoginPage(isFirstLaunch: true) : const LoginPage(),
-        '/membership': (context) => MembershipSelectionPage(userId: userId ?? 'unknown'),
-        '/home': (context) => const HomePage(),
+      onGenerateRoute: (settings) {
+        // Extract route parameters
+        final uri = Uri.parse(settings.name ?? '');
+        final queryParams = uri.queryParameters;
+        final isFirstLaunch = queryParams['isFirstLaunch'] == 'true';
+        final isSignUp = queryParams['isSignUp'] == 'true';
+        final showLoginContent = queryParams['showLoginContent'] == 'true';
+        
+        // Save onboarding status when user starts the login process
+        if (uri.path == '/login') {
+          prefs.setBool('has_started_onboarding', true);
+        }
+        
+        // Handle routes
+        switch (uri.path) {
+          case '/login':
+            return MaterialPageRoute(
+              builder: (context) => LoginPage(
+                isFirstLaunch: isFirstLaunch,
+                isSignUp: isSignUp,
+                showLoginContent: showLoginContent,
+              ),
+            );
+          case '/membership':
+            return MaterialPageRoute(
+              builder: (context) => MembershipSelectionPage(
+                userId: settings.arguments != null && settings.arguments is Map<String, dynamic>
+                    ? (settings.arguments as Map<String, dynamic>)['userId'] ?? prefs.getString('user_id') ?? 'unknown'
+                    : prefs.getString('user_id') ?? 'unknown',
+              ),
+            );
+          case '/homepage':
+            return MaterialPageRoute(
+              builder: (context) => const HomePage(),
+            );
+          default:
+            return MaterialPageRoute(
+              builder: (context) => LoginPage(
+                isFirstLaunch: isFirstLaunch,
+                isSignUp: isSignUp,
+                showLoginContent: showLoginContent,
+              ),
+            );
+        }
       },
     );
   }
 
   String _determineInitialRoute() {
-    // If user is logged in and has selected a membership, go directly to home
-    if (userId != null && hasSelectedMembership) {
-      return '/home';
+    final isFirstLaunch = prefs.getBool('is_first_launch') ?? true;
+    final hasStartedOnboarding = prefs.getBool('has_started_onboarding') ?? false;
+    final userId = prefs.getString('user_id');
+    final hasMembership = prefs.getBool('has_membership') ?? false;
+
+    // Set is_first_launch to false after the first launch
+    if (isFirstLaunch) {
+      prefs.setBool('is_first_launch', false);
+    }
+
+    // If user is logged in and has selected a membership, go to homepage
+    if (userId != null && hasMembership) {
+      return '/homepage';
     }
     
     // If user is logged in but hasn't selected a membership, go to membership selection
-    if (userId != null && !hasSelectedMembership) {
+    if (userId != null && !hasMembership) {
       return '/membership';
     }
     
-    // Otherwise, go to login page
-    return '/';
+    // If user has started onboarding but not completed login, return to login page
+    if (hasStartedOnboarding) {
+      return '/login?showLoginContent=true';
+    }
+    
+    // Otherwise, show the initial login page with options
+    return isFirstLaunch ? '/login?isFirstLaunch=true' : '/login';
   }
 }
 

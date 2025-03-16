@@ -1,129 +1,210 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui';
-import 'main.dart'; // Import for SizeConfig
-
-// Define consistent color constants to match the app theme
-const Color kPrimaryBlue = Color(0xFF13519C);
-const Color kSecondaryBlue = Color(0xFF1A6BC6);
-const Color kLightBlue = Color(0xFF3B82F6);
+import 'dart:math' as math;
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class MembershipSelectionPage extends StatefulWidget {
-  final String userId; // User ID from authentication
+  final String userId;
 
   const MembershipSelectionPage({
-    super.key,
+    Key? key,
     required this.userId,
-  });
+  }) : super(key: key);
 
   @override
   State<MembershipSelectionPage> createState() => _MembershipSelectionPageState();
 }
 
-class _MembershipSelectionPageState extends State<MembershipSelectionPage> with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  int _selectedMembershipIndex = 0; // Default to free membership
-
-  // Membership plan details
-  final List<Map<String, dynamic>> _membershipPlans = [
-    {
-      'title': 'Free',
-      'price': '\$0',
-      'period': 'forever',
-      'features': [
-        'Basic features access',
-        'Limited storage',
-        'Standard support',
-        'Ad-supported experience',
-      ],
-      'color': const Color(0xFF64748B), // Slate gray for free tier
-      'recommended': false,
-    },
-    {
-      'title': 'Premium',
-      'price': '\$9.99',
-      'period': 'per month',
-      'features': [
-        'All basic features',
-        'Enhanced storage capacity',
-        'Priority customer support',
-        'Ad-free experience',
-        'Advanced analytics',
-      ],
-      'color': const Color(0xFF3B82F6), // Blue for premium tier
-      'recommended': true,
-    },
-    {
-      'title': 'Ultimate',
-      'price': '\$19.99',
-      'period': 'per month',
-      'features': [
-        'All premium features',
-        'Unlimited storage',
-        '24/7 dedicated support',
-        'Exclusive content access',
-        'Custom branding options',
-        'Team collaboration tools',
-      ],
-      'color': const Color(0xFF8B5CF6), // Purple for ultimate tier
-      'recommended': false,
-    },
-  ];
+class _MembershipSelectionPageState extends State<MembershipSelectionPage> with TickerProviderStateMixin {
+  int _selectedPlan = -1;
+  bool _isProcessing = false;
+  
+  // Animation controllers - add pulse animation controller
+  late AnimationController _cardsAnimController;
+  late AnimationController _shineAnimController;
+  late AnimationController _pulseAnimController;
+  
+  // Animations
+  late List<Animation<double>> _cardAnims;
+  late Animation<double> _shineAnim;
+  late Animation<double> _pulseAnim;
+  
+  // Razorpay
+  late Razorpay _razorpay;
+  
+  // Membership prices in paise (100 paise = ₹1)
+  final Map<int, int> _membershipPrices = {
+    0: 0,         // Free tier
+    1: 149900,    // Premium tier (₹1499)
+    2: 249900,    // Ultimate tier (₹2499)
+  };
+  
+  // Membership names
+  final Map<int, String> _membershipNames = {
+    0: 'Free Membership',
+    1: 'Premium Membership',
+    2: 'Ultimate Membership',
+  };
 
   @override
   void initState() {
     super.initState();
     
-    // Initialize animation controller
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    
-    // Create fade animation
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-    
-    // Start animation
-    _animationController.forward();
+    try {
+      // Initialize animation controllers
+      _cardsAnimController = AnimationController(
+        duration: const Duration(milliseconds: 1200),
+        vsync: this,
+      );
+      
+      // Add shine animation controller back
+      _shineAnimController = AnimationController(
+        duration: const Duration(milliseconds: 2000),
+        vsync: this,
+      )..repeat();
+      
+      // Add pulse animation controller
+      _pulseAnimController = AnimationController(
+        duration: const Duration(milliseconds: 1500),
+        vsync: this,
+      )..repeat(reverse: true);
+      
+      // Create staggered animations for cards
+      _cardAnims = List.generate(3, (index) {
+        final delay = 0.2 * index;
+        return Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(
+            parent: _cardsAnimController,
+            curve: Interval(delay, delay + 0.6, curve: Curves.easeOutCubic),
+          ),
+        );
+      });
+      
+      // Add shine animation back
+      _shineAnim = Tween<double>(begin: -0.5, end: 1.5).animate(
+        CurvedAnimation(parent: _shineAnimController, curve: Curves.easeInOut)
+      );
+      
+      // Add pulse animation
+      _pulseAnim = Tween<double>(begin: 1.0, end: 1.03).animate(
+        CurvedAnimation(parent: _pulseAnimController, curve: Curves.easeInOut)
+      );
+      
+      // Start animations
+      _cardsAnimController.forward();
+      
+      // Initialize Razorpay
+      _initializeRazorpay();
+    } catch (e) {
+      debugPrint('Error initializing animations: $e');
+      // Initialize with default values to prevent null errors
+      _cardAnims = List.generate(3, (_) => const AlwaysStoppedAnimation(1.0));
+      _shineAnim = const AlwaysStoppedAnimation(0.0);
+      _pulseAnim = const AlwaysStoppedAnimation(1.0);
+    }
+  }
+  
+  void _initializeRazorpay() {
+    _razorpay = Razorpay();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    // Safely dispose animation controllers
+    try {
+      if (_cardsAnimController.isAnimating) {
+        _cardsAnimController.stop();
+      }
+      if (_shineAnimController.isAnimating) {
+        _shineAnimController.stop();
+      }
+      if (_pulseAnimController.isAnimating) {
+        _pulseAnimController.stop();
+      }
+      
+      _cardsAnimController.dispose();
+      _shineAnimController.dispose();
+      _pulseAnimController.dispose();
+      
+      // Dispose Razorpay
+      _razorpay.clear();
+    } catch (e) {
+      debugPrint('Error disposing animation controllers: $e');
+    }
     super.dispose();
   }
 
-  // Save user membership selection and navigate to home page
-  Future<void> _saveMembershipAndContinue() async {
+  Future<void> _selectMembership() async {
+    if (_selectedPlan == -1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a membership plan'),
+          backgroundColor: Color(0xFF6B46C1),
+        ),
+      );
+      return;
+    }
+    
+    setState(() {
+      _isProcessing = true;
+    });
+    
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // Stop animations to prevent rendering issues during navigation
+      _stopAllAnimations();
       
-      // Save membership selection
-      await prefs.setString('user_membership', _membershipPlans[_selectedMembershipIndex]['title']);
-      
-      // Mark user as not new (for future logins)
-      await prefs.setBool('is_first_launch', false);
-      
-      // Save user ID if needed
-      await prefs.setString('user_id', widget.userId);
-      
-      // Navigate to home page and remove all previous routes
-      if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(
-          context, 
-          '/home', 
-          (route) => false,
-        );
+      // For free tier, proceed directly
+      if (_selectedPlan == 0) {
+        await _saveMembershipAndNavigate();
+      } else {
+        // For paid tiers, open Razorpay payment
+        _openRazorpayCheckout();
       }
     } catch (e) {
-      // Show error if something goes wrong
+      debugPrint('Error selecting membership: $e');
       if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting membership: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  Future<void> _saveMembershipAndNavigate() async {
+    try {
+      // Save membership selection to SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('membership_plan', _selectedPlan);
+      await prefs.setBool('has_membership', true);
+      
+      // Navigate to homepage after a short delay to show the processing state
+      if (mounted) {
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/homepage');
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error saving membership: $e');
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error saving membership: $e'),
@@ -133,384 +214,785 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
       }
     }
   }
+  
+  void _openRazorpayCheckout() {
+    // Get the price for the selected plan
+    final amount = _membershipPrices[_selectedPlan] ?? 0;
+    final planName = _membershipNames[_selectedPlan] ?? 'Membership';
+    
+    // Create options for Razorpay
+    var options = {
+      'key': 'rzp_test_1DP5mmOlF5G5ag', // Replace with your actual Razorpay key
+      'amount': amount,
+      'name': 'PathOne',
+      'description': planName,
+      'prefill': {
+        'contact': '',
+        'email': ''
+      },
+      'external': {
+        'wallets': ['paytm']
+      }
+    };
+    
+    try {
+      _razorpay.open(options);
+    } catch (e) {
+      debugPrint('Error opening Razorpay: $e');
+      setState(() {
+        _isProcessing = false;
+      });
+      
+      Fluttertoast.showToast(
+        msg: "Error opening payment gateway",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+      );
+    }
+  }
+  
+  void _handlePaymentSuccess(PaymentSuccessResponse response) {
+    // Payment was successful, save membership and navigate
+    Fluttertoast.showToast(
+      msg: "Payment successful: ${response.paymentId}",
+      toastLength: Toast.LENGTH_SHORT,
+      gravity: ToastGravity.BOTTOM,
+      backgroundColor: Colors.green,
+      textColor: Colors.white,
+    );
+    
+    _saveMembershipAndNavigate();
+  }
+  
+  void _handlePaymentError(PaymentFailureResponse response) {
+    // Payment failed
+    Fluttertoast.showToast(
+      msg: "Payment failed: ${response.message}",
+      toastLength: Toast.LENGTH_SHORT,
+      gravity: ToastGravity.BOTTOM,
+      backgroundColor: Colors.red,
+      textColor: Colors.white,
+    );
+    
+    setState(() {
+      _isProcessing = false;
+    });
+  }
+  
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    // External wallet was selected
+    Fluttertoast.showToast(
+      msg: "External wallet selected: ${response.walletName}",
+      toastLength: Toast.LENGTH_SHORT,
+      gravity: ToastGravity.BOTTOM,
+      backgroundColor: Colors.blue,
+      textColor: Colors.white,
+    );
+    
+    setState(() {
+      _isProcessing = false;
+    });
+  }
+
+  // Helper method to safely stop all animations
+  void _stopAllAnimations() {
+    try {
+      if (_cardsAnimController.isAnimating) {
+        _cardsAnimController.stop();
+      }
+      if (_shineAnimController.isAnimating) {
+        _shineAnimController.stop();
+      }
+      if (_pulseAnimController.isAnimating) {
+        _pulseAnimController.stop();
+      }
+    } catch (e) {
+      debugPrint('Error stopping animations: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Initialize SizeConfig
-    SizeConfig().init(context);
-    
-    // Calculate responsive sizes
-    final titleFontSize = SizeConfig.isSmallScreen ? 24.0 : 28.0;
-    final subtitleFontSize = SizeConfig.isSmallScreen ? 14.0 : 16.0;
-    final planTitleFontSize = SizeConfig.isSmallScreen ? 20.0 : 22.0;
-    final priceFontSize = SizeConfig.isSmallScreen ? 22.0 : 24.0;
-    final periodFontSize = SizeConfig.isSmallScreen ? 12.0 : 14.0;
-    final featureTitleFontSize = SizeConfig.isSmallScreen ? 14.0 : 16.0;
-    final featureItemFontSize = SizeConfig.isSmallScreen ? 12.0 : 14.0;
-    final buttonFontSize = SizeConfig.isSmallScreen ? 16.0 : 18.0;
-    
-    // Calculate responsive paddings
-    final horizontalPadding = SizeConfig.blockSizeHorizontal * 6; // 6% of screen width
-    final verticalPadding = SizeConfig.blockSizeVertical * 3; // 3% of screen height
-    final headerTopPadding = SizeConfig.isSmallScreen ? 
-        SizeConfig.blockSizeVertical * 3 : SizeConfig.blockSizeVertical * 5;
-    final headerBottomPadding = SizeConfig.blockSizeVertical * 2;
-    final itemSpacing = SizeConfig.blockSizeVertical * 1.5;
-    final buttonHeight = SizeConfig.isSmallScreen ? 48.0 : 56.0;
-    
-    return Scaffold(
-      body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header section
-              Container(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding, 
-                  headerTopPadding, 
-                  horizontalPadding, 
-                  headerBottomPadding
-                ),
+    try {
+      final screenSize = MediaQuery.of(context).size;
+      final screenWidth = screenSize.width;
+      final screenHeight = screenSize.height;
+      
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle.dark,
+          title: const Text(
+            'Select Membership',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+              fontSize: 20,
+            ),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF1E293B)),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Simple solid background instead of animated background
+            Container(
+              color: const Color(0xFFF8FAFC),
+            ),
+            
+            // Main content
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // App logo/title
+                    const SizedBox(height: 16),
+                    
+                    // Header text with gradient
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
-                        colors: [
-                          kPrimaryBlue,
-                          kSecondaryBlue,
-                          kLightBlue,
-                        ],
+                        colors: [Color(0xFF3B82F6), Color(0xFF00E5FF)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ).createShader(bounds),
-                      child: Text(
-                        'PathOne',
+                      child: const Text(
+                        'Choose Your Path',
                         style: TextStyle(
-                          fontSize: titleFontSize,
-                          fontWeight: FontWeight.bold,
                           fontFamily: 'Inter',
+                          fontWeight: FontWeight.w800,
+                          fontSize: 28,
                           color: Colors.white,
                           letterSpacing: 0.5,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                    SizedBox(height: itemSpacing * 1.5),
                     
-                    // Page title
+                    const SizedBox(height: 8),
+                    
+                    // Subheader
                     Text(
-                      'Choose Your Membership',
+                      'Select the membership that fits your journey',
                       style: TextStyle(
-                        fontSize: titleFontSize,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1F2937),
                         fontFamily: 'Inter',
+                        fontWeight: FontWeight.w400,
+                        fontSize: 16,
+                        color: Color(0xFF64748B),
+                        letterSpacing: 0.3,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Membership cards
+                    Expanded(
+                      child: ScrollConfiguration(
+                        behavior: const BouncingScrollBehavior(),
+                        child: ListView(
+                          clipBehavior: Clip.none,
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            // Free Membership Card
+                            _buildMembershipCard(
+                              index: 0,
+                              title: 'Free',
+                              price: '₹0',
+                              period: 'forever',
+                              features: [
+                                'Access to Basic Course (100 Career Fields)',
+                                '10-Minute Teaching Videos per Career Field',
+                                '7-Day AI-Powered Career Discovery (5 Hours A Day)',
+                                'Basic AI Career Tests (10-min per field)',
+                                'Top 5 Career Recommendations after completion',
+                              ],
+                              gradientColors: const [
+                                Color(0xFF64748B), // Darker slate
+                                Color(0xFF94A3B8), // Medium slate
+                              ],
+                              glowColor: const Color(0xFF475569), // Darker glow color
+                              isPopular: false,
+                            ),
+                            
+                            const SizedBox(height: 20),
+                            
+                            // Premium Membership Card
+                            _buildMembershipCard(
+                              index: 1,
+                              title: 'Premium',
+                              price: '₹1499',
+                              period: 'per month',
+                              features: [
+                                'Access to Mega Course (All Free Features Included)',
+                                'Deep-Dive into 5 Best-Fit Careers (AI Recommended)',
+                                'In-Depth Teaching (5 Hours Daily for 7 Days)',
+                                'Advanced AI Tests & Performance Analysis',
+                                'Exclusive premium content',
+                              ],
+                              gradientColors: const [
+                                Color(0xFF3B82F6),
+                                Color(0xFF00E5FF),
+                              ],
+                              glowColor: const Color(0xFF3B82F6).withOpacity(0.4),
+                              isPopular: true,
+                              popularLabel: 'POPULAR',
+                            ),
+                            
+                            const SizedBox(height: 20),
+                            
+                            // Ultimate Membership Card
+                            _buildMembershipCard(
+                              index: 2,
+                              title: 'Ultimate',
+                              price: '₹2499',
+                              period: 'per month',
+                              features: [
+                                'Access to Excellence Course (All Premium Features Included)',
+                                'Specialized Career Training (1 Best-Fit Career)',
+                                'Job Role Selection within that Career',
+                                'Real-World Projects & Industry Case Studies',
+                                ' AI-Powered Personalized Career Roadmap',
+                              ],
+                              gradientColors: const [
+                                Color(0xFF6366F1),
+                                Color(0xFFA855F7),
+                              ],
+                              glowColor: const Color(0xFF6366F1).withOpacity(0.5),
+                              isPopular: false,
+                              isElite: true,
+                            ),
+                            
+                            const SizedBox(height: 16),
+                          ],
+                        ),
                       ),
                     ),
-                    SizedBox(height: itemSpacing * 0.8),
                     
-                    // Subtitle
-                    Text(
-                      'Select the plan that works best for you',
-                      style: TextStyle(
-                        fontSize: subtitleFontSize,
-                        color: Colors.grey[600],
-                        fontFamily: 'Inter',
-                      ),
+                    // Select button
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                      child: _buildSelectButton(),
                     ),
                   ],
                 ),
               ),
-              
-              // Membership options
-              Expanded(
-                child: ListView.builder(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: horizontalPadding, 
-                    vertical: verticalPadding * 0.5
-                  ),
-                  itemCount: _membershipPlans.length,
-                  itemBuilder: (context, index) {
-                    final plan = _membershipPlans[index];
-                    final isSelected = _selectedMembershipIndex == index;
-                    
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedMembershipIndex = index;
-                        });
-                      },
-                      child: Container(
-                        margin: EdgeInsets.only(bottom: itemSpacing * 1.3),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isSelected 
-                                ? plan['color'] 
-                                : Colors.grey[300]!,
-                            width: isSelected ? 2.5 : 1.5,
-                          ),
-                          color: Colors.white,
-                          boxShadow: [
-                            BoxShadow(
-                              color: isSelected 
-                                  ? plan['color'].withOpacity(0.2) 
-                                  : Colors.grey.withOpacity(0.1),
-                              blurRadius: 10,
-                              spreadRadius: 1,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Plan header with recommended badge if applicable
-                            Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                // Plan header
-                                Container(
-                                  padding: EdgeInsets.all(SizeConfig.blockSizeHorizontal * 5),
-                                  decoration: BoxDecoration(
-                                    color: plan['color'].withOpacity(0.1),
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(16),
-                                      topRight: Radius.circular(16),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      // Plan title
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            plan['title'],
-                                            style: TextStyle(
-                                              fontSize: planTitleFontSize,
-                                              fontWeight: FontWeight.bold,
-                                              color: plan['color'],
-                                              fontFamily: 'Inter',
-                                            ),
-                                          ),
-                                          SizedBox(height: itemSpacing * 0.3),
-                                          Row(
-                                            children: [
-                                              Text(
-                                                plan['price'],
-                                                style: TextStyle(
-                                                  fontSize: priceFontSize,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: const Color(0xFF1F2937),
-                                                  fontFamily: 'Inter',
-                                                ),
-                                              ),
-                                              SizedBox(width: SizeConfig.blockSizeHorizontal),
-                                              Text(
-                                                plan['period'],
-                                                style: TextStyle(
-                                                  fontSize: periodFontSize,
-                                                  color: Colors.grey[600],
-                                                  fontFamily: 'Inter',
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                      
-                                      // Selection indicator
-                                      Container(
-                                        width: SizeConfig.blockSizeHorizontal * 7,
-                                        height: SizeConfig.blockSizeHorizontal * 7,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: isSelected 
-                                              ? plan['color'] 
-                                              : Colors.white,
-                                          border: Border.all(
-                                            color: isSelected 
-                                                ? plan['color'] 
-                                                : Colors.grey[300]!,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        child: isSelected 
-                                            ? Icon(
-                                                Icons.check,
-                                                color: Colors.white,
-                                                size: SizeConfig.blockSizeHorizontal * 4,
-                                              )
-                                            : null,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                
-                                // Recommended badge
-                                if (plan['recommended'])
-                                  Positioned(
-                                    top: -SizeConfig.blockSizeVertical * 1.5,
-                                    right: SizeConfig.blockSizeHorizontal * 5,
-                                    child: Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: SizeConfig.blockSizeHorizontal * 3,
-                                        vertical: SizeConfig.blockSizeVertical * 0.7,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: plan['color'],
-                                        borderRadius: BorderRadius.circular(20),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: plan['color'].withOpacity(0.3),
-                                            blurRadius: 8,
-                                            spreadRadius: 1,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Text(
-                                        'RECOMMENDED',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: SizeConfig.isSmallScreen ? 10 : 12,
-                                          fontWeight: FontWeight.bold,
-                                          fontFamily: 'Inter',
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            
-                            // Plan features
-                            Padding(
-                              padding: EdgeInsets.all(SizeConfig.blockSizeHorizontal * 5),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Features',
-                                    style: TextStyle(
-                                      fontSize: featureTitleFontSize,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1F2937),
-                                      fontFamily: 'Inter',
-                                    ),
-                                  ),
-                                  SizedBox(height: itemSpacing * 0.8),
-                                  ...List.generate(
-                                    plan['features'].length,
-                                    (i) => Padding(
-                                      padding: EdgeInsets.only(bottom: itemSpacing * 0.7),
-                                      child: Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Icon(
-                                            Icons.check_circle,
-                                            color: plan['color'],
-                                            size: SizeConfig.blockSizeHorizontal * 5,
-                                          ),
-                                          SizedBox(width: SizeConfig.blockSizeHorizontal * 3),
-                                          Expanded(
-                                            child: Text(
-                                              plan['features'][i],
-                                              style: TextStyle(
-                                                fontSize: featureItemFontSize,
-                                                color: Color(0xFF4B5563),
-                                                fontFamily: 'Inter',
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error building membership selection page: $e');
+      // Return a simple fallback UI in case of error
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Select Membership'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios),
+            onPressed: () {
+              try {
+                Navigator.of(context).pop();
+              } catch (e) {
+                debugPrint('Error navigating back: $e');
+              }
+            },
+          ),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Something went wrong',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              
-              // Continue button
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding, 
-                  verticalPadding * 0.5, 
-                  horizontalPadding, 
-                  verticalPadding
-                ),
-                child: Container(
-                  height: buttonHeight,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        kPrimaryBlue,
-                        kSecondaryBlue,
-                        kLightBlue,
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: kPrimaryBlue.withOpacity(0.5),
-                        blurRadius: 15,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    onPressed: _saveMembershipAndContinue,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: EdgeInsets.zero,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Continue with ${_membershipPlans[_selectedMembershipIndex]['title']}',
-                          style: TextStyle(
-                            fontSize: buttonFontSize,
-                            fontWeight: FontWeight.w700,
-                            fontFamily: 'Inter',
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        SizedBox(width: SizeConfig.blockSizeHorizontal * 2),
-                        Icon(
-                          Icons.arrow_forward,
-                          color: Colors.white,
-                          size: SizeConfig.blockSizeHorizontal * 5,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  try {
+                    Navigator.of(context).pushReplacementNamed('/homepage');
+                  } catch (e) {
+                    debugPrint('Error navigating to homepage: $e');
+                  }
+                },
+                child: const Text('Go to Homepage'),
               ),
             ],
           ),
         ),
+      );
+    }
+  }
+  
+  Widget _buildMembershipCard({
+    required int index,
+    required String title,
+    required String price,
+    required String period,
+    required List<String> features,
+    required List<Color> gradientColors,
+    required Color glowColor,
+    required bool isPopular,
+    String? popularLabel,
+    bool isElite = false,
+  }) {
+    // Ensure index is within bounds for _cardAnims
+    if (index < 0 || index >= _cardAnims.length) {
+      debugPrint('Invalid card index: $index');
+      return const SizedBox.shrink(); // Return empty widget instead of crashing
+    }
+    
+    return AnimatedBuilder(
+      animation: _cardAnims[index],
+      builder: (context, child) {
+        // Safely handle animation value
+        final animValue = _cardAnims[index].value;
+        
+        return Transform.translate(
+          offset: Offset(0, 50 * (1 - animValue)),
+          child: Opacity(
+            opacity: animValue,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedPlan = index;
+                });
+                HapticFeedback.lightImpact();
+              },
+              child: AnimatedBuilder(
+                animation: _pulseAnim,
+                builder: (context, child) {
+                  // Apply pulse animation only to the selected card
+                  final scale = _selectedPlan == index ? _pulseAnim.value : 1.0;
+                  
+                  return Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Stack(
+                        children: [
+                          // Card with simplified effect
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _selectedPlan == index 
+                                      ? glowColor.withOpacity(0.5)
+                                      : glowColor.withOpacity(0.3),
+                                  blurRadius: _selectedPlan == index ? 15 : 10,
+                                  spreadRadius: _selectedPlan == index ? 2 : 1,
+                                  offset: const Offset(0, 0),
+                                ),
+                              ],
+                              border: Border.all(
+                                color: _selectedPlan == index
+                                    ? gradientColors[1].withOpacity(0.8)
+                                    : Colors.white.withOpacity(0.5),
+                                width: _selectedPlan == index ? 2.0 : 1.0,
+                              ),
+                            ),
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Title row with badge if applicable
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    // Title with gradient
+                                    ShaderMask(
+                                      shaderCallback: (bounds) => LinearGradient(
+                                        colors: gradientColors,
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ).createShader(bounds),
+                                      child: Text(
+                                        title,
+                                        style: const TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 24,
+                                          color: Colors.white,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                    
+                                    // Badge for popular or elite
+                                    if (isPopular)
+                                      _buildBadge(
+                                        label: popularLabel ?? 'POPULAR',
+                                        colors: gradientColors,
+                                      )
+                                    else if (isElite)
+                                      _buildEliteBadge(),
+                                  ],
+                                ),
+                                
+                                const SizedBox(height: 16),
+                                
+                                // Price
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      price,
+                                      style: TextStyle(
+                                        fontFamily: 'Inter',
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 32,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 5),
+                                      child: Text(
+                                        period,
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontWeight: FontWeight.w400,
+                                          fontSize: 14,
+                                          color: Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                
+                                const SizedBox(height: 24),
+                                
+                                // Features list
+                                ...features.map((feature) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Row(
+                                    children: [
+                                      // Checkmark icon with gradient
+                                      Container(
+                                        width: 20,
+                                        height: 20,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: gradientColors,
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.check,
+                                            color: Colors.white,
+                                            size: 12,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          feature,
+                                          style: TextStyle(
+                                            fontFamily: 'Inter',
+                                            fontWeight: FontWeight.w400,
+                                            fontSize: 15,
+                                            color: Color(0xFF334155),
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                              ],
+                            ),
+                          ),
+                          
+                          // Shine effect for Ultimate tier
+                          if (isElite)
+                            Positioned.fill(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(20),
+                                child: AnimatedBuilder(
+                                  animation: _shineAnim,
+                                  builder: (context, child) {
+                                    return SimplifiedShineEffect(
+                                      position: _shineAnim.value,
+                                      color: Colors.white,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+  
+  Widget _buildBadge({required String label, required List<Color> colors}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: colors[1].withOpacity(0.3),
+            blurRadius: 8,
+            spreadRadius: 0,
+          ),
+        ],
       ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: 'Inter',
+          fontWeight: FontWeight.w700,
+          fontSize: 10,
+          color: Colors.white,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildEliteBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+          colors: [Color(0xFF6B46C1), Color(0xFFD946EF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD946EF).withOpacity(0.3),
+            blurRadius: 8,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(
+            Icons.star,
+            color: Colors.white,
+            size: 12,
+          ),
+          SizedBox(width: 4),
+          Text(
+            'ELITE ACCESS',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+              color: Colors.white,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSelectButton() {
+    try {
+      // Define gradient colors based on selected plan
+      List<Color> buttonGradient;
+      Color shadowColor;
+      
+      if (_selectedPlan == 0) {
+        // Free plan colors - updated to match darker colors
+        buttonGradient = const [Color(0xFF64748B), Color(0xFF94A3B8)];
+        shadowColor = const Color(0xFF475569);
+      } else if (_selectedPlan == 1) {
+        // Premium plan colors
+        buttonGradient = const [Color(0xFF3B82F6), Color(0xFF00E5FF)];
+        shadowColor = const Color(0xFF3B82F6);
+      } else if (_selectedPlan == 2) {
+        // Ultimate plan colors
+        buttonGradient = const [Color(0xFF6366F1), Color(0xFFA855F7)];
+        shadowColor = const Color(0xFF6366F1);
+      } else {
+        // Default colors when no plan is selected
+        buttonGradient = const [Color(0xFF3B82F6), Color(0xFF00E5FF)];
+        shadowColor = const Color(0xFF3B82F6);
+      }
+      
+      return Container(
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: _selectedPlan == -1
+                ? [buttonGradient[0].withOpacity(0.5), buttonGradient[1].withOpacity(0.5)]
+                : buttonGradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: shadowColor.withOpacity(_selectedPlan == -1 ? 0.2 : 0.4),
+              blurRadius: 15,
+              spreadRadius: 1,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: _isProcessing ? null : _selectMembership,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: EdgeInsets.zero,
+            elevation: 0,
+          ),
+          child: _isProcessing
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Text(
+                      'Select Membership',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(
+                      Icons.arrow_forward,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ],
+                ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error building select button: $e');
+      // Return a simple fallback button
+      return ElevatedButton(
+        onPressed: _isProcessing ? null : _selectMembership,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF3B82F6),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+        ),
+        child: _isProcessing
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : const Text('Select Membership'),
+      );
+    }
+  }
+}
+
+// Custom scroll behavior for bouncing effect
+class BouncingScrollBehavior extends ScrollBehavior {
+  const BouncingScrollBehavior();
+  
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    return const BouncingScrollPhysics();
+  }
+}
+
+// Simplified shine effect that uses a positioned container instead of CustomPaint
+class SimplifiedShineEffect extends StatelessWidget {
+  final double position;
+  final Color color;
+  
+  const SimplifiedShineEffect({
+    Key? key,
+    required this.position,
+    required this.color,
+  }) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+        
+        // Calculate position of the shine
+        final shineWidth = width * 0.4;
+        final left = width * position - shineWidth;
+        
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: 0,
+              bottom: 0,
+              width: shineWidth,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      color.withOpacity(0.0),
+                      color.withOpacity(0.2),
+                      color.withOpacity(0.0),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 } 

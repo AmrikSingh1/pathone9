@@ -29,7 +29,23 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final membershipType = prefs.getString('user_membership') ?? 'Free';
+      final membershipPlan = prefs.getInt('membership_plan') ?? -1;
+      
+      // Convert membership plan number to string
+      String membershipType;
+      switch (membershipPlan) {
+        case 0:
+          membershipType = 'Free';
+          break;
+        case 1:
+          membershipType = 'Premium';
+          break;
+        case 2:
+          membershipType = 'Ultimate';
+          break;
+        default:
+          membershipType = 'Free';
+      }
       
       setState(() {
         _membershipType = membershipType;
@@ -222,6 +238,24 @@ class _HomePageState extends State<HomePage> {
                                       label: 'Settings',
                                       onTap: () {},
                                     ),
+                                    SizedBox(width: horizontalPadding),
+                                    _buildQuickActionButton(
+                                      icon: Icons.card_membership,
+                                      label: 'Change Membership',
+                                      onTap: () async {
+                                        // Get user ID from SharedPreferences
+                                        final prefs = await SharedPreferences.getInstance();
+                                        final userId = prefs.getString('user_id') ?? 'unknown';
+                                        
+                                        if (mounted) {
+                                          Navigator.pushNamed(
+                                            context, 
+                                            '/membership',
+                                            arguments: {'userId': userId}
+                                          );
+                                        }
+                                      },
+                                    ),
                                   ],
                                 ),
                               )
@@ -241,6 +275,24 @@ class _HomePageState extends State<HomePage> {
                                       label: 'Settings',
                                       onTap: () {},
                                     ),
+                                    SizedBox(height: verticalPadding * 0.8),
+                                    _buildQuickActionButton(
+                                      icon: Icons.card_membership,
+                                      label: 'Change Membership',
+                                      onTap: () async {
+                                        // Get user ID from SharedPreferences
+                                        final prefs = await SharedPreferences.getInstance();
+                                        final userId = prefs.getString('user_id') ?? 'unknown';
+                                        
+                                        if (mounted) {
+                                          Navigator.pushNamed(
+                                            context, 
+                                            '/membership',
+                                            arguments: {'userId': userId}
+                                          );
+                                        }
+                                      },
+                                    ),
                                   ],
                                 ),
                               ),
@@ -252,6 +304,7 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+      bottomNavigationBar: _isLoading ? null : _buildUpgradeMembershipButton(),
     );
   }
 
@@ -330,5 +383,97 @@ class _HomePageState extends State<HomePage> {
       default:
         return Icons.check_circle;
     }
+  }
+
+  Widget _buildUpgradeMembershipButton() {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.blockSizeHorizontal * 5,
+        vertical: SizeConfig.blockSizeVertical * 2,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x1A000000),
+            blurRadius: 10,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Container(
+        height: SizeConfig.blockSizeVertical * 7,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: _membershipType == 'Ultimate' 
+                ? [const Color(0xFF6B46C1), const Color(0xFFD946EF)]
+                : _membershipType == 'Premium'
+                    ? [const Color(0xFF1A6BC6), const Color(0xFF00E5FF)]
+                    : [const Color(0xFF13519C), const Color(0xFF3B82F6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: _getMembershipColor().withOpacity(0.3),
+              blurRadius: 15,
+              spreadRadius: 1,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: () async {
+            // Get user ID from SharedPreferences
+            final prefs = await SharedPreferences.getInstance();
+            final userId = prefs.getString('user_id') ?? 'unknown';
+            
+            if (mounted) {
+              Navigator.pushNamed(
+                context, 
+                '/membership',
+                arguments: {'userId': userId}
+              );
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: EdgeInsets.zero,
+            elevation: 0,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _membershipType == 'Free' ? Icons.upgrade : Icons.card_membership,
+                color: Colors.white,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                _membershipType == 'Ultimate' 
+                    ? 'Manage Your Ultimate Membership'
+                    : _membershipType == 'Premium'
+                        ? 'Upgrade to Ultimate Membership'
+                        : 'Upgrade Your Membership',
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 } 
