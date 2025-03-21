@@ -5,6 +5,9 @@ import 'package:country_code_picker/country_code_picker.dart'; // Import for cou
 import 'package:pathone9/services/auth_service.dart'; // Import for Google sign-in
 import 'package:firebase_auth/firebase_auth.dart'; // Import for Firebase Auth
 import 'main.dart'; // Import for SizeConfig
+import 'package:flutter/services.dart';
+import 'dart:async';
+import 'dart:math';
 
 // Define consistent color constants to match logo-transparent.png
 const Color kPrimaryBlue = Color(0xFF13519C); // Primary blue from logo
@@ -88,9 +91,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool _isPhoneVerified = false;
   bool _isShowingOtpField = false;
   final _otpController = TextEditingController();
+  // Add new controllers for individual OTP digits
+  final List<TextEditingController> _otpDigitControllers = List.generate(6, (_) => TextEditingController());
+  final List<FocusNode> _otpFocusNodes = List.generate(6, (_) => FocusNode());
+  final List<bool> _otpDigitCorrect = List.generate(6, (_) => false);
   bool _isVerifyingPhone = false;
   bool _isGettingCode = false;
-  
+
   // Add Firebase Phone Auth variables
   String _verificationId = '';
   int? _resendToken;
@@ -209,6 +216,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     _keyboardAnimController.dispose();
     _contentFadeController.dispose(); // Dispose content fade controller
     _otpController.dispose();
+    
+    // Dispose individual OTP controllers and focus nodes
+    for (var controller in _otpDigitControllers) {
+      controller.dispose();
+    }
+    for (var focusNode in _otpFocusNodes) {
+      focusNode.dispose();
+    }
     super.dispose();
   }
 
@@ -331,11 +346,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       // For step 1, send verification code
       if (_forgotPasswordStep == 1) {
         final phoneNumber = '$_selectedCountryCode${_phoneController.text}';
-        
-      setState(() {
-        _formContentOpacity = 0.0;
-      });
-        
+
+        setState(() {
+          _formContentOpacity = 0.0;
+        });
+
         // Firebase phone verification for password reset
         _auth.verifyPhoneNumber(
           phoneNumber: phoneNumber,
@@ -347,7 +362,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               setState(() {
                 _formContentOpacity = 1.0;
               });
-              
+
               String errorMessage = 'Verification failed';
               if (e.code == 'invalid-phone-number') {
                 errorMessage = 'Invalid phone number format';
@@ -356,7 +371,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               } else {
                 errorMessage = 'Error: ${e.message}';
               }
-              
+
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(errorMessage),
@@ -369,13 +384,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             if (mounted) {
               _verificationId = verificationId;
 
-      Future.delayed(const Duration(milliseconds: 300), () {
-        setState(() {
-          _forgotPasswordStep++;
-          _formContentOpacity = 1.0;
-        });
-      });
-              
+              Future.delayed(const Duration(milliseconds: 300), () {
+                setState(() {
+                  _forgotPasswordStep++;
+                  _formContentOpacity = 1.0;
+                });
+              });
+
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Verification code sent! Please check your messages.'),
@@ -391,19 +406,19 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           },
           timeout: const Duration(seconds: 60),
         );
-      } 
+      }
       // For step 2, verify the code
       else if (_forgotPasswordStep == 2) {
         setState(() {
           _formContentOpacity = 0.0;
         });
-        
+
         // Verify the OTP code
         PhoneAuthCredential credential = PhoneAuthProvider.credential(
           verificationId: _verificationId,
           smsCode: _verificationCodeController.text,
         );
-        
+
         _auth.signInWithCredential(credential).then((_) {
           // Successfully verified, move to password reset step
           if (mounted) {
@@ -419,7 +434,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             setState(() {
               _formContentOpacity = 1.0;
             });
-            
+
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Invalid verification code. Please try again.'),
@@ -447,15 +462,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     if (_formKey.currentState!.validate()) {
       // Get current user
       User? user = _auth.currentUser;
-      
+
       if (user != null) {
         // Update password
         user.updatePassword(_newPasswordController.text).then((_) {
-      // Show success message and return to login
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password reset successful! Please login with your new password.'),
-          backgroundColor: Colors.green,
+          // Show success message and return to login
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Password reset successful! Please login with your new password.'),
+              backgroundColor: Colors.green,
             ),
           );
           _returnToLogin();
@@ -474,9 +489,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           const SnackBar(
             content: Text('Authentication error. Please try again.'),
             backgroundColor: Colors.red,
-        ),
-      );
-      _returnToLogin();
+          ),
+        );
+        _returnToLogin();
       }
     }
   }
@@ -589,35 +604,35 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         try {
           // In a real app, you would authenticate with your backend here
           // For this example, we'll simulate a successful authentication
-          
+
           // Generate a mock user ID (in a real app, this would come from your backend)
           final String mockUserId = DateTime.now().millisecondsSinceEpoch.toString();
-          
+
           // Save user data in SharedPreferences
           final prefs = await SharedPreferences.getInstance();
-          
+
           // Get the current user ID (could be from Google sign-in)
           final userId = prefs.getString('user_id') ?? mockUserId;
-          
+
           // Save the user ID (if not already saved)
           await prefs.setString('user_id', userId);
-          
+
           // If this is a Google user completing their profile, mark it as completed
           final currentUser = _auth.currentUser;
-          if (currentUser != null && currentUser.providerData.any((info) => 
-              info.providerId == 'google.com')) {
+          if (currentUser != null && currentUser.providerData.any((info) =>
+          info.providerId == 'google.com')) {
             await prefs.setBool('google_profile_completed_$userId', true);
           }
-          
+
           // For login flow, check if user has already selected a membership
           final hasMembership = prefs.getBool('has_membership') ?? false;
           final isNewUser = !_isLogin;
-          
+
           if (mounted) {
             if (isNewUser) {
               // New user - navigate to membership selection
               Navigator.pushReplacementNamed(
-                context, 
+                context,
                 '/membership',
               );
             } else {
@@ -627,7 +642,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               } else {
                 // Returning user without membership - go to membership selection
                 Navigator.pushReplacementNamed(
-                  context, 
+                  context,
                   '/membership',
                 );
               }
@@ -655,14 +670,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       );
       return;
     }
-    
+
     setState(() {
       _isGettingCode = true;
     });
-    
+
     // Format the phone number with country code
     final phoneNumber = '$_selectedCountryCode${_phoneController.text}';
-    
+
     // Firebase phone verification
     _auth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
@@ -673,7 +688,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             _isGettingCode = false;
             _isVerifyingPhone = true;
           });
-          
+
           try {
             await _auth.signInWithCredential(credential);
             if (mounted) {
@@ -682,7 +697,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 _isShowingOtpField = false;
                 _isPhoneVerified = true;
               });
-              
+
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Phone number verified automatically!'),
@@ -695,7 +710,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               setState(() {
                 _isVerifyingPhone = false;
               });
-              
+
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Verification failed: ${e.toString()}'),
@@ -712,7 +727,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           setState(() {
             _isGettingCode = false;
           });
-          
+
           String errorMessage = 'Verification failed';
           if (e.code == 'invalid-phone-number') {
             errorMessage = 'Invalid phone number format';
@@ -721,7 +736,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           } else {
             errorMessage = 'Error: ${e.message}';
           }
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(errorMessage),
@@ -739,11 +754,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             _isGettingCode = false;
             _isShowingOtpField = true;
           });
-          
+
+          // Initialize OTP field
+          _initializeOtpField();
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Verification code sent! Please check your messages.'),
-              duration: Duration(seconds: 5),
+              backgroundColor: Colors.green,
             ),
           );
         }
@@ -760,25 +778,36 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       forceResendingToken: _resendToken,
     );
   }
-  
+
   void _verifyOtpCode() {
-    if (_otpController.text.isEmpty) {
+    // Collect OTP from individual controllers to ensure we have the latest values
+    String otp = '';
+    for (var controller in _otpDigitControllers) {
+      otp += controller.text.isEmpty ? '' : controller.text;
+    }
+    
+    // Update the main controller if needed
+    if (otp.length == 6 && _otpController.text != otp) {
+      _otpController.text = otp;
+    }
+
+    if (_otpController.text.isEmpty || _otpController.text.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the verification code')),
+        const SnackBar(content: Text('Please enter the complete verification code')),
       );
       return;
     }
-    
+
     setState(() {
       _isVerifyingPhone = true;
     });
-    
+
     // Create credential with verification ID and OTP
     PhoneAuthCredential credential = PhoneAuthProvider.credential(
       verificationId: _verificationId,
       smsCode: _otpController.text,
     );
-    
+
     // Sign in with credential
     _auth.signInWithCredential(credential).then((userCredential) {
       if (mounted) {
@@ -787,7 +816,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           _isShowingOtpField = false;
           _isPhoneVerified = true;
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Phone number verified successfully!'),
@@ -800,7 +829,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         setState(() {
           _isVerifyingPhone = false;
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Invalid verification code. Please try again.'),
@@ -811,11 +840,28 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     });
   }
 
+  // Add this method to initialize OTP input field
+  void _initializeOtpField() {
+    // Clear all controllers and reset correctness
+    for (int i = 0; i < 6; i++) {
+      _otpDigitControllers[i].clear();
+      _otpDigitCorrect[i] = false;
+    }
+    
+    // Clear main OTP controller
+    _otpController.clear();
+    
+    // Focus the first field
+    if (_otpFocusNodes.isNotEmpty) {
+      _otpFocusNodes[0].requestFocus();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Initialize SizeConfig
     SizeConfig().init(context);
-    
+
     final screenSize = MediaQuery.of(context).size;
     final screenWidth = screenSize.width;
     final screenHeight = screenSize.height;
@@ -835,7 +881,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     // Calculate container height based on animation state and form type
     // Adjust height for small screens to prevent overflow
     final optionsHeight = isSmallScreen ? screenHeight * 0.28 : screenHeight * 0.32; // Further reduced from 0.30/0.34
-    final loginFormHeight = _isLogin 
+    final loginFormHeight = _isLogin
         ? (isSmallScreen ? screenHeight * 0.70 : screenHeight * 0.74) // Increased from 0.68 to 0.70 for small screens
         : (isSmallScreen ? screenHeight * 0.85 : screenHeight * 0.88); // Increased from 0.82 to 0.85 for small screens
     final containerHeight = optionsHeight + (loginFormHeight - optionsHeight) * _containerExpandPosition;
@@ -1166,176 +1212,176 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(16),
-                                        color: Colors.white,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: kPrimaryBlue.withOpacity(0.1),
-                                            blurRadius: 8,
-                                            spreadRadius: 1,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          // Country code picker
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              border: Border(
-                                                right: BorderSide(
-                                                  color: Colors.grey[300]!,
-                                                  width: 1,
-                                                ),
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(16),
+                                            color: Colors.white,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: kPrimaryBlue.withOpacity(0.1),
+                                                blurRadius: 8,
+                                                spreadRadius: 1,
+                                                offset: const Offset(0, 2),
                                               ),
-                                            ),
-                                            child: CountryCodePicker(
-                                              onChanged: (CountryCode countryCode) {
-                                                setState(() {
-                                                  _selectedCountryCode = countryCode.dialCode!;
-                                                });
-                                              },
-                                              initialSelection: 'IN',
-                                              favorite: const ['+91', '+1', '+44', '+61', '+86', '+81', '+49', '+33', '+7', '+55'],
-                                              showCountryOnly: false,
-                                              showOnlyCountryWhenClosed: false,
-                                              alignLeft: false,
+                                            ],
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              // Country code picker
+                                              Container(
+                                                decoration: BoxDecoration(
+                                                  border: Border(
+                                                    right: BorderSide(
+                                                      color: Colors.grey[300]!,
+                                                      width: 1,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: CountryCodePicker(
+                                                  onChanged: (CountryCode countryCode) {
+                                                    setState(() {
+                                                      _selectedCountryCode = countryCode.dialCode!;
+                                                    });
+                                                  },
+                                                  initialSelection: 'IN',
+                                                  favorite: const ['+91', '+1', '+44', '+61', '+86', '+81', '+49', '+33', '+7', '+55'],
+                                                  showCountryOnly: false,
+                                                  showOnlyCountryWhenClosed: false,
+                                                  alignLeft: false,
                                                   padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02),
-                                              textStyle: TextStyle(
-                                                color: Colors.grey[800],
+                                                  textStyle: TextStyle(
+                                                    color: Colors.grey[800],
                                                     fontSize: inputFontSize,
-                                                fontFamily: 'Inter',
-                                              ),
-                                              searchDecoration: InputDecoration(
-                                                labelText: 'Search Country',
-                                                labelStyle: TextStyle(
-                                                  color: Colors.grey[600],
-                                                      fontSize: inputFontSize,
-                                                  fontFamily: 'Inter',
-                                                ),
-                                                prefixIcon: Icon(
-                                                  Icons.search,
-                                                  color: kPrimaryBlue,
-                                                      size: iconSize,
-                                                ),
-                                                border: OutlineInputBorder(
-                                                  borderRadius: BorderRadius.circular(16),
-                                                  borderSide: BorderSide(
-                                                    color: Colors.grey[300]!,
+                                                    fontFamily: 'Inter',
                                                   ),
-                                                ),
-                                              ),
-                                              flagDecoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              boxDecoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius: BorderRadius.circular(16),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: kPrimaryBlue.withOpacity(0.1),
-                                                    blurRadius: 8,
-                                                    spreadRadius: 1,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          // Phone number input field
-                                          Expanded(
-                                            child: TextFormField(
-                                              controller: _phoneController,
-                                                  enabled: !_isPhoneVerified, // Disable when verified
-                                              validator: (value) {
-                                                if (value == null || value.isEmpty) {
-                                                  return 'Please enter your phone number';
-                                                }
-                                                if (value.length < 10) {
-                                                  return 'Please enter a valid phone number';
-                                                }
-                                                    if (!_isPhoneVerified) {
-                                                      return 'Please verify your phone number';
-                                                }
-                                                return null;
-                                              },
-                                              keyboardType: TextInputType.phone,
-                                                  style: TextStyle(
-                                                color: Color(0xFF1F2937),
-                                                    fontSize: inputFontSize,
-                                              ),
-                                              decoration: InputDecoration(
-                                                labelText: 'Phone Number',
-                                                labelStyle: TextStyle(
-                                                  color: Colors.grey[600],
+                                                  searchDecoration: InputDecoration(
+                                                    labelText: 'Search Country',
+                                                    labelStyle: TextStyle(
+                                                      color: Colors.grey[600],
                                                       fontSize: inputFontSize,
-                                                ),
-                                                prefixIcon: Icon(
-                                                  Icons.phone_outlined,
-                                                  color: kPrimaryBlue,
+                                                      fontFamily: 'Inter',
+                                                    ),
+                                                    prefixIcon: Icon(
+                                                      Icons.search,
+                                                      color: kPrimaryBlue,
                                                       size: iconSize,
                                                     ),
-                                                    suffixIcon: _isPhoneVerified 
-                                                      ? Icon(
-                                                          Icons.verified,
-                                                          color: Colors.green,
-                                                          size: iconSize,
-                                                        )
-                                                      : null,
-                                                enabledBorder: OutlineInputBorder(
-                                                  borderRadius: const BorderRadius.only(
-                                                    topRight: Radius.circular(16),
-                                                    bottomRight: Radius.circular(16),
+                                                    border: OutlineInputBorder(
+                                                      borderRadius: BorderRadius.circular(16),
+                                                      borderSide: BorderSide(
+                                                        color: Colors.grey[300]!,
+                                                      ),
+                                                    ),
                                                   ),
-                                                  borderSide: BorderSide(
-                                                    color: Colors.grey[300]!,
-                                                    width: 1.5,
+                                                  flagDecoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(4),
                                                   ),
-                                                ),
-                                                focusedBorder: OutlineInputBorder(
-                                                  borderRadius: const BorderRadius.only(
-                                                    topRight: Radius.circular(16),
-                                                    bottomRight: Radius.circular(16),
-                                                  ),
-                                                  borderSide: BorderSide(
-                                                    color: kPrimaryBlue,
-                                                    width: 2,
+                                                  boxDecoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                        color: kPrimaryBlue.withOpacity(0.1),
+                                                        blurRadius: 8,
+                                                        spreadRadius: 1,
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
-                                                errorBorder: OutlineInputBorder(
-                                                  borderRadius: const BorderRadius.only(
-                                                    topRight: Radius.circular(16),
-                                                    bottomRight: Radius.circular(16),
+                                              ),
+                                              // Phone number input field
+                                              Expanded(
+                                                child: TextFormField(
+                                                  controller: _phoneController,
+                                                  enabled: !_isPhoneVerified, // Disable when verified
+                                                  validator: (value) {
+                                                    if (value == null || value.isEmpty) {
+                                                      return 'Please enter your phone number';
+                                                    }
+                                                    if (value.length < 10) {
+                                                      return 'Please enter a valid phone number';
+                                                    }
+                                                    if (!_isPhoneVerified) {
+                                                      return 'Please verify your phone number';
+                                                    }
+                                                    return null;
+                                                  },
+                                                  keyboardType: TextInputType.phone,
+                                                  style: TextStyle(
+                                                    color: Color(0xFF1F2937),
+                                                    fontSize: inputFontSize,
                                                   ),
-                                                  borderSide: const BorderSide(
-                                                    color: Colors.redAccent,
-                                                    width: 1.5,
-                                                  ),
-                                                ),
-                                                focusedErrorBorder: OutlineInputBorder(
-                                                  borderRadius: const BorderRadius.only(
-                                                    topRight: Radius.circular(16),
-                                                    bottomRight: Radius.circular(16),
-                                                  ),
-                                                  borderSide: const BorderSide(
-                                                    color: Colors.redAccent,
-                                                    width: 2,
-                                                  ),
-                                                ),
-                                                filled: true,
-                                                fillColor: Colors.white,
+                                                  decoration: InputDecoration(
+                                                    labelText: 'Phone Number',
+                                                    labelStyle: TextStyle(
+                                                      color: Colors.grey[600],
+                                                      fontSize: inputFontSize,
+                                                    ),
+                                                    prefixIcon: Icon(
+                                                      Icons.phone_outlined,
+                                                      color: kPrimaryBlue,
+                                                      size: iconSize,
+                                                    ),
+                                                    suffixIcon: _isPhoneVerified
+                                                        ? Icon(
+                                                      Icons.verified,
+                                                      color: Colors.green,
+                                                      size: iconSize,
+                                                    )
+                                                        : null,
+                                                    enabledBorder: OutlineInputBorder(
+                                                      borderRadius: const BorderRadius.only(
+                                                        topRight: Radius.circular(16),
+                                                        bottomRight: Radius.circular(16),
+                                                      ),
+                                                      borderSide: BorderSide(
+                                                        color: Colors.grey[300]!,
+                                                        width: 1.5,
+                                                      ),
+                                                    ),
+                                                    focusedBorder: OutlineInputBorder(
+                                                      borderRadius: const BorderRadius.only(
+                                                        topRight: Radius.circular(16),
+                                                        bottomRight: Radius.circular(16),
+                                                      ),
+                                                      borderSide: BorderSide(
+                                                        color: kPrimaryBlue,
+                                                        width: 2,
+                                                      ),
+                                                    ),
+                                                    errorBorder: OutlineInputBorder(
+                                                      borderRadius: const BorderRadius.only(
+                                                        topRight: Radius.circular(16),
+                                                        bottomRight: Radius.circular(16),
+                                                      ),
+                                                      borderSide: const BorderSide(
+                                                        color: Colors.redAccent,
+                                                        width: 1.5,
+                                                      ),
+                                                    ),
+                                                    focusedErrorBorder: OutlineInputBorder(
+                                                      borderRadius: const BorderRadius.only(
+                                                        topRight: Radius.circular(16),
+                                                        bottomRight: Radius.circular(16),
+                                                      ),
+                                                      borderSide: const BorderSide(
+                                                        color: Colors.redAccent,
+                                                        width: 2,
+                                                      ),
+                                                    ),
+                                                    filled: true,
+                                                    fillColor: Colors.white,
                                                     contentPadding: EdgeInsets.symmetric(
                                                       horizontal: screenWidth * 0.05,
                                                       vertical: screenHeight * 0.02,
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
-                                            ),
+                                            ],
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                        
+                                        ),
+
                                         // Get Code button (only show if not verified and not showing OTP field)
                                         if (!_isPhoneVerified && !_isShowingOtpField)
                                           Align(
@@ -1347,8 +1393,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                                 style: TextButton.styleFrom(
                                                   foregroundColor: kPrimaryBlue,
                                                   padding: EdgeInsets.symmetric(
-                                                    horizontal: screenWidth * 0.03, 
-                                                    vertical: screenHeight * 0.007
+                                                      horizontal: screenWidth * 0.03,
+                                                      vertical: screenHeight * 0.007
                                                   ),
                                                   shape: RoundedRectangleBorder(
                                                     borderRadius: BorderRadius.circular(8),
@@ -1357,97 +1403,64 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                                   backgroundColor: Colors.white,
                                                 ),
                                                 child: _isGettingCode
-                                                  ? SizedBox(
-                                                      width: screenWidth * 0.04,
-                                                      height: screenWidth * 0.04,
-                                                      child: CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        valueColor: AlwaysStoppedAnimation<Color>(kPrimaryBlue),
-                                                      ),
-                                                    )
-                                                  : Text(
-                                                      'Get Code',
-                                                      style: TextStyle(
-                                                        fontSize: buttonFontSize,
-                                                        fontWeight: FontWeight.w500,
-                                                        fontFamily: 'Inter',
-                                                      ),
-                                                    ),
+                                                    ? SizedBox(
+                                                  width: screenWidth * 0.04,
+                                                  height: screenWidth * 0.04,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor: AlwaysStoppedAnimation<Color>(kPrimaryBlue),
+                                                  ),
+                                                )
+                                                    : Text(
+                                                  'Get Code',
+                                                  style: TextStyle(
+                                                    fontSize: buttonFontSize,
+                                                    fontWeight: FontWeight.w500,
+                                                    fontFamily: 'Inter',
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        
+
                                         // OTP verification field (only show when requested)
                                         if (_isShowingOtpField) ...[
                                           SizedBox(height: screenHeight * 0.02),
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(16),
-                                              color: Colors.white,
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: kPrimaryBlue.withOpacity(0.1),
-                                                  blurRadius: 8,
-                                                  spreadRadius: 1,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            child: TextFormField(
-                                              controller: _otpController,
-                                              keyboardType: TextInputType.number,
-                                              maxLength: 6,
-                                              style: TextStyle(
-                                                color: Color(0xFF1F2937),
-                                                fontSize: inputFontSize,
-                                                letterSpacing: screenWidth * 0.03, // Responsive letter spacing
-                                                fontFamily: 'Inter',
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              textAlign: TextAlign.center, // Center the OTP digits
-                                              decoration: InputDecoration(
-                                                labelText: 'Verification Code',
-                                                labelStyle: TextStyle(
-                                                  color: Colors.grey[600],
-                                                  fontSize: inputFontSize,
-                                                  fontFamily: 'Inter',
-                                                ),
-                                                prefixIcon: Icon(
-                                                  Icons.security,
-                                                  color: kPrimaryBlue,
-                                                  size: iconSize,
-                                                ),
-                                                counterText: '', // Hide the character counter
-                                                enabledBorder: OutlineInputBorder(
-                                                  borderRadius: BorderRadius.circular(16),
-                                                  borderSide: BorderSide(
-                                                    color: Colors.grey[300]!,
-                                                    width: 1.5,
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Padding(
+                                                padding: const EdgeInsets.only(left: 8.0, bottom: 8.0),
+                                                child: Text(
+                                                  'Verification Code',
+                                                  style: TextStyle(
+                                                    color: Colors.grey[600],
+                                                    fontSize: inputFontSize * 0.9,
+                                                    fontFamily: 'Inter',
+                                                    fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
-                                                focusedBorder: OutlineInputBorder(
-                                                  borderRadius: BorderRadius.circular(16),
-                                                  borderSide: BorderSide(
-                                                    color: kPrimaryBlue,
-                                                    width: 2,
+                                              ),
+                                              Container(
+                                                padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.04),
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween, // Changed from spaceEvenly to spaceBetween
+                                                  children: List.generate(
+                                                    6,
+                                                    (index) => OtpDigitBox(
+                                                      controller: _otpDigitControllers[index],
+                                                      focusNode: _otpFocusNodes[index],
+                                                      isCorrect: _otpDigitCorrect[index],
+                                                      onChanged: (value) => _handleOtpDigitInput(value, index),
+                                                      onBackspace: () => _handleOtpDigitBackspace(index),
+                                                    ),
                                                   ),
                                                 ),
-                                                filled: true,
-                                                fillColor: Colors.white,
-                                                contentPadding: EdgeInsets.symmetric(
-                                                  horizontal: screenWidth * 0.05,
-                                                  vertical: screenHeight * 0.02,
-                                                ),
-                                                hintText: "• • • • • •", // Dot placeholders for OTP
-                                                hintStyle: TextStyle(
-                                                  color: Colors.grey[400],
-                                                  fontSize: inputFontSize,
-                                                  letterSpacing: screenWidth * 0.03,
-                                                ),
                                               ),
-                                            ),
+                                              SizedBox(height: screenHeight * 0.02),
+                                            ],
                                           ),
-                                          
+
                                           // Verify button
                                           Align(
                                             alignment: Alignment.centerRight,
@@ -1458,8 +1471,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                                 style: TextButton.styleFrom(
                                                   foregroundColor: kPrimaryBlue,
                                                   padding: EdgeInsets.symmetric(
-                                                    horizontal: screenWidth * 0.04, 
-                                                    vertical: screenHeight * 0.007
+                                                      horizontal: screenWidth * 0.04,
+                                                      vertical: screenHeight * 0.007
                                                   ),
                                                   shape: RoundedRectangleBorder(
                                                     borderRadius: BorderRadius.circular(8),
@@ -1468,22 +1481,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                                   backgroundColor: Colors.white,
                                                 ),
                                                 child: _isVerifyingPhone
-                                                  ? SizedBox(
-                                                      width: screenWidth * 0.04,
-                                                      height: screenWidth * 0.04,
-                                                      child: CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        valueColor: AlwaysStoppedAnimation<Color>(kPrimaryBlue),
-                                                      ),
-                                                    )
-                                                  : Text(
-                                                      'Verify',
-                                                      style: TextStyle(
-                                                        fontSize: buttonFontSize,
-                                                        fontWeight: FontWeight.w500,
-                                                        fontFamily: 'Inter',
-                                                      ),
-                                                    ),
+                                                    ? SizedBox(
+                                                  width: screenWidth * 0.04,
+                                                  height: screenWidth * 0.04,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor: AlwaysStoppedAnimation<Color>(kPrimaryBlue),
+                                                  ),
+                                                )
+                                                    : Text(
+                                                  'Verify',
+                                                  style: TextStyle(
+                                                    fontSize: buttonFontSize,
+                                                    fontWeight: FontWeight.w500,
+                                                    fontFamily: 'Inter',
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -2060,42 +2073,42 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                     width: double.infinity,
                                     margin: EdgeInsets.only(bottom: screenHeight * 0.03), // Added margin to ensure visibility
                                     child: Center(
-                                    child: Padding(
+                                      child: Padding(
                                         padding: const EdgeInsets.symmetric(vertical: 4), // Reduced from 6
-                                      child: TextButton(
-                                        onPressed: _switchMode,
-                                        style: TextButton.styleFrom(
+                                        child: TextButton(
+                                          onPressed: _switchMode,
+                                          style: TextButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 20), // Reduced padding
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(8),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
                                           ),
-                                        ),
-                                        child: RichText(
-                                          text: TextSpan(
+                                          child: RichText(
+                                            text: TextSpan(
                                               style: TextStyle(
                                                 fontSize: isSmallScreen ? 14 : 16, // Smaller font on small screens
-                                              fontWeight: FontWeight.w400,
-                                              fontFamily: 'Inter',
-                                              color: Color(0xFF6B7280),
-                                              height: 1.5,
-                                            ),
-                                            children: [
-                                              TextSpan(
-                                                text: _isLogin ? 'Don\'t have an account? ' : 'Already have an account? ',
+                                                fontWeight: FontWeight.w400,
+                                                fontFamily: 'Inter',
+                                                color: Color(0xFF6B7280),
+                                                height: 1.5,
                                               ),
-                                              TextSpan(
-                                                text: _isLogin ? 'Sign Up' : 'Login',
-                                                style: const TextStyle(
-                                                  color: kPrimaryBlue,
-                                                  fontWeight: FontWeight.w600,
+                                              children: [
+                                                TextSpan(
+                                                  text: _isLogin ? 'Don\'t have an account? ' : 'Already have an account? ',
                                                 ),
-                                              ),
-                                            ],
+                                                TextSpan(
+                                                  text: _isLogin ? 'Sign Up' : 'Login',
+                                                  style: const TextStyle(
+                                                    color: kPrimaryBlue,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
                                   ),
                                 ],
                               ),
@@ -2112,130 +2125,130 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                 vertical: isSmallScreen ? verticalSpacing * 0.6 : verticalSpacing, // Reduced padding further
                                 horizontal: horizontalPadding * 0.5,
                               ),
-                          child: Column(
-                            children: [
-                              ShaderMask(
-                                shaderCallback: (bounds) => LinearGradient(
-                                  colors: [
-                                    kPrimaryBlue,
-                                    kSecondaryBlue,
-                                    kLightBlue,
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ).createShader(bounds),
-                                child: Text(
-                                  '',
-                                  style: TextStyle(
+                              child: Column(
+                                children: [
+                                  ShaderMask(
+                                    shaderCallback: (bounds) => LinearGradient(
+                                      colors: [
+                                        kPrimaryBlue,
+                                        kSecondaryBlue,
+                                        kLightBlue,
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ).createShader(bounds),
+                                    child: Text(
+                                      '',
+                                      style: TextStyle(
                                         fontSize: isSmallScreen ? 20 : 22,
-                                    fontWeight: FontWeight.w700,
-                                    fontFamily: 'Inter',
-                                    color: const Color(0xFF1F2937),
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                                  SizedBox(height: verticalSpacing * 0.8), // Reduced from verticalSpacing
-                              Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                                child: Container(
-                                      height: buttonHeight * 0.9, // Reduced button height
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16),
-                                    gradient: const LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        kPrimaryBlue,
-                                        kSecondaryBlue,
-                                        kLightBlue,
-                                      ],
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: kPrimaryBlue.withOpacity(0.5),
-                                        blurRadius: 15,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
-                                  child: ElevatedButton(
-                                    onPressed: () => _navigateToLoginContent(isLoginMode: true),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.transparent,
-                                      foregroundColor: Colors.white,
-                                      shadowColor: Colors.transparent,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                    ),
-                                        child: Text(
-                                      'Login',
-                                      style: TextStyle(
-                                            fontSize: isSmallScreen ? 16 : 18,
                                         fontWeight: FontWeight.w700,
                                         fontFamily: 'Inter',
-                                        color: Colors.white,
+                                        color: const Color(0xFF1F2937),
                                         letterSpacing: 0.5,
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
                                   SizedBox(height: verticalSpacing * 0.8), // Reduced from verticalSpacing
-                              Padding(
+                                  Padding(
                                     padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                                child: Container(
+                                    child: Container(
                                       height: buttonHeight * 0.9, // Reduced button height
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16),
-                                    gradient: const LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        kPrimaryBlue,
-                                        kSecondaryBlue,
-                                        kLightBlue,
-                                      ],
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: kPrimaryBlue.withOpacity(0.5),
-                                        blurRadius: 15,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
-                                  child: ElevatedButton(
-                                    onPressed: () => _navigateToLoginContent(isLoginMode: false),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.transparent,
-                                      foregroundColor: Colors.white,
-                                      shadowColor: Colors.transparent,
-                                      shape: RoundedRectangleBorder(
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(16),
+                                        gradient: const LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            kPrimaryBlue,
+                                            kSecondaryBlue,
+                                            kLightBlue,
+                                          ],
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: kPrimaryBlue.withOpacity(0.5),
+                                            blurRadius: 15,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
                                       ),
-                                      padding: EdgeInsets.zero,
-                                    ),
+                                      child: ElevatedButton(
+                                        onPressed: () => _navigateToLoginContent(isLoginMode: true),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.transparent,
+                                          foregroundColor: Colors.white,
+                                          shadowColor: Colors.transparent,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                        ),
                                         child: Text(
-                                      'Sign Up',
-                                      style: TextStyle(
+                                          'Login',
+                                          style: TextStyle(
                                             fontSize: isSmallScreen ? 16 : 18,
-                                        fontWeight: FontWeight.w700,
-                                        fontFamily: 'Inter',
-                                        color: Colors.white,
-                                        letterSpacing: 0.5,
+                                            fontWeight: FontWeight.w700,
+                                            fontFamily: 'Inter',
+                                            color: Colors.white,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
+                                  SizedBox(height: verticalSpacing * 0.8), // Reduced from verticalSpacing
+                                  Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                                    child: Container(
+                                      height: buttonHeight * 0.9, // Reduced button height
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        gradient: const LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            kPrimaryBlue,
+                                            kSecondaryBlue,
+                                            kLightBlue,
+                                          ],
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: kPrimaryBlue.withOpacity(0.5),
+                                            blurRadius: 15,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: ElevatedButton(
+                                        onPressed: () => _navigateToLoginContent(isLoginMode: false),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.transparent,
+                                          foregroundColor: Colors.white,
+                                          shadowColor: Colors.transparent,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        child: Text(
+                                          'Sign Up',
+                                          style: TextStyle(
+                                            fontSize: isSmallScreen ? 16 : 18,
+                                            fontWeight: FontWeight.w700,
+                                            fontFamily: 'Inter',
+                                            color: Colors.white,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                   // Add bottom padding to ensure content doesn't get cut off
                                   SizedBox(height: verticalSpacing * 0.8), // Reduced from verticalSpacing
-                            ],
+                                ],
                               ),
                             ),
                           ),
@@ -2421,13 +2434,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           children: [
             _isGoogleSignInLoading
                 ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(kPrimaryBlue),
-                    ),
-                  )
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(kPrimaryBlue),
+              ),
+            )
                 : Image.asset(
               'assets/images/google_icon.png',
               width: 24,
@@ -2455,27 +2468,27 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     setState(() {
       _isGoogleSignInLoading = true;
     });
-    
+
     try {
       final userCredential = await _authService.signInWithGoogle();
-      
+
       if (userCredential != null && mounted) {
         // Get user ID and user info
         final userId = userCredential.user!.uid;
         final isNewUser = userCredential.additionalUserInfo?.isNewUser ?? false;
-        
+
         // Save user ID to shared preferences
         final prefs = await SharedPreferences.getInstance();
-        
+
         // Check if this Google user has signed in before and completed profile
         final existingUserId = prefs.getString('user_id');
         final hasCompletedProfile = prefs.getBool('google_profile_completed_$userId') ?? false;
         final isReturningUser = existingUserId == userId && hasCompletedProfile;
-        
+
         // Always save the user ID
         await prefs.setString('user_id', userId);
         await prefs.setBool('is_first_launch', false);
-        
+
         // If user is new OR hasn't completed their profile yet, show the account creation form
         if (isNewUser || !hasCompletedProfile) {
           if (mounted) {
@@ -2483,12 +2496,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             if (userCredential.user?.email != null) {
               _emailController.text = userCredential.user!.email!;
             }
-            
+
             // Pre-fill name if available
             if (userCredential.user?.displayName != null) {
               _nameController.text = userCredential.user!.displayName!;
             }
-            
+
             // Navigate to sign up form
             setState(() {
               _isGoogleSignInLoading = false;
@@ -2498,23 +2511,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               _formContentOpacity = 1.0;
               _containerExpandPosition = 1.0;
             });
-            
+
             // Ensure content fade controller is at the right value
             _contentFadeController.value = 1.0;
-            
+
             // Adjust container position for sign up form
             _animateFormContentOffset(30.0);
-            
+
             // Start transition animation for background image if not already started
             if (_transitionController.status != AnimationStatus.completed) {
               _transitionController.forward();
             }
-            
+
             // Fade out the logo if needed
             if (_fadeController.status != AnimationStatus.completed) {
               _fadeController.forward();
             }
-            
+
             // Show a message to complete profile
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -2530,10 +2543,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             // If they're a returning user, ensure has_membership is set to true
             await prefs.setBool('has_membership', true);
           }
-          
+
           // Check if user has selected a membership
           final hasMembership = prefs.getBool('has_membership') ?? false;
-          
+
           if (mounted) {
             if (hasMembership || isReturningUser) {
               // Navigate directly to home page for returning users or users with membership
@@ -2558,5 +2571,310 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         });
       }
     }
+  }
+
+  // Add this method to handle OTP digit input
+  void _handleOtpDigitInput(String value, int index) {
+    // Update the main OTP controller
+    String currentOtp = _otpController.text;
+    
+    if (value.isEmpty) {
+      // Handle clearing a digit
+      if (currentOtp.length > index) {
+        // Remove the digit at this position
+        _otpController.text = currentOtp.substring(0, index) + 
+            (index + 1 < currentOtp.length ? currentOtp.substring(index + 1) : '');
+      }
+      
+      // Mark this digit as not correct
+      setState(() {
+        _otpDigitCorrect[index] = false;
+      });
+      
+      // Keep focus on this field when cleared
+      _otpFocusNodes[index].requestFocus();
+    } else if (value.isNotEmpty) {
+      // Handle adding a digit
+      if (currentOtp.length <= index) {
+        currentOtp = currentOtp.padRight(index) + value;
+      } else {
+        currentOtp = currentOtp.substring(0, index) + value + 
+            (index + 1 < currentOtp.length ? currentOtp.substring(index + 1) : '');
+      }
+      _otpController.text = currentOtp;
+      
+      // Simulate validation (in a real app, you might validate against expected values)
+      // For demo purposes, we'll consider all digits valid
+      setState(() {
+        _otpDigitCorrect[index] = true;
+      });
+      
+      // Move focus to next field if not the last one
+      if (index < 5 && value.isNotEmpty) {
+        _otpFocusNodes[index + 1].requestFocus();
+      }
+    }
+  }
+
+  // Add this method to handle backspace in OTP fields
+  void _handleOtpDigitBackspace(int index) {
+    // If current field is empty and not the first field, move to previous field
+    if (_otpDigitControllers[index].text.isEmpty && index > 0) {
+      // Focus on the previous field
+      _otpFocusNodes[index - 1].requestFocus();
+      
+      // No need to update the main OTP controller here as we're just moving focus
+      
+      // Remove the code that clears the previous field's content
+      // We want to keep the content and just move focus
+    } else if (_otpDigitControllers[index].text.isNotEmpty) {
+      // Clear current field
+      _otpDigitControllers[index].clear();
+      
+      // Update the main OTP controller
+      if (_otpController.text.length > index) {
+        _otpController.text = _otpController.text.substring(0, index) + 
+            (index + 1 < _otpController.text.length ? _otpController.text.substring(index + 1) : '');
+      }
+      
+      setState(() {
+        _otpDigitCorrect[index] = false;
+      });
+      
+      // Keep focus on this field after clearing
+      _otpFocusNodes[index].requestFocus();
+    }
+  }
+}
+
+// Add the OtpDigitBox widget at the end of the file, before the last closing brace
+class OtpDigitBox extends StatefulWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool isCorrect;
+  final Function(String) onChanged;
+  final Function() onBackspace;
+
+  const OtpDigitBox({
+    Key? key,
+    required this.controller,
+    required this.focusNode,
+    required this.isCorrect,
+    required this.onChanged,
+    required this.onBackspace,
+  }) : super(key: key);
+
+  @override
+  State<OtpDigitBox> createState() => _OtpDigitBoxState();
+}
+
+class _OtpDigitBoxState extends State<OtpDigitBox> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _glowAnimation;
+  late Animation<double> _shakeAnimation;
+  bool _wasCorrect = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+
+    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+
+    _shakeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.7, curve: Curves.elasticIn),
+      ),
+    );
+    
+    // Add listener to handle backspace
+    widget.controller.addListener(_handleBackspace);
+  }
+
+  // Track previous text to detect backspace
+  String _previousText = '';
+  
+  void _handleBackspace() {
+    // If text was deleted and now empty, it's likely a backspace
+    if (_previousText.isNotEmpty && widget.controller.text.isEmpty) {
+      widget.onBackspace();
+    }
+    _previousText = widget.controller.text;
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleBackspace);
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(OtpDigitBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Update controller listener if controller changed
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller.removeListener(_handleBackspace);
+      widget.controller.addListener(_handleBackspace);
+    }
+    
+    // Trigger animations when correctness changes
+    if (widget.isCorrect != _wasCorrect) {
+      _wasCorrect = widget.isCorrect;
+      if (widget.isCorrect) {
+        _animationController.forward(from: 0.0);
+      } else if (widget.controller.text.isNotEmpty) {
+        _animationController.forward(from: 0.0);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final boxWidth = screenWidth * 0.08; // Even narrower width
+    final boxHeight = boxWidth * 1.6; // Taller height for more pronounced rectangular shape
+    
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        double offsetX = 0.0;
+        if (!widget.isCorrect && widget.controller.text.isNotEmpty) {
+          offsetX = sin(_shakeAnimation.value * 3 * pi) * 5;
+        }
+        
+        // Calculate border width with animation for correct digits
+        final borderWidth = widget.isCorrect && widget.controller.text.isNotEmpty
+            ? 1.5 + (_glowAnimation.value * 0.5) // Animate border width from 1.5 to 2.0
+            : widget.focusNode.hasFocus 
+                ? 1.5 
+                : 1.0;
+        
+        return Transform.translate(
+          offset: Offset(offsetX, 0),
+          child: Container(
+            width: boxWidth,
+            height: boxHeight,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6), // Smaller border radius for rectangular shape
+              border: Border.all(
+                color: widget.focusNode.hasFocus
+                    ? const Color(0xFF3B82F6)
+                    : widget.isCorrect && widget.controller.text.isNotEmpty
+                        ? const Color(0xFF34A853).withOpacity(0.6 + (_glowAnimation.value * 0.2)) // Animate border opacity
+                        : Colors.grey[300]!,
+                width: borderWidth,
+              ),
+              boxShadow: [
+                if (widget.isCorrect && widget.controller.text.isNotEmpty)
+                  // First shadow - outer glow
+                  BoxShadow(
+                    color: const Color(0xFF34A853).withOpacity(_glowAnimation.value * 0.15),
+                    blurRadius: 4 + (_glowAnimation.value * 3),
+                    spreadRadius: 0.5,
+                  ),
+                // Second shadow - border highlight
+                if (widget.isCorrect && widget.controller.text.isNotEmpty)
+                  BoxShadow(
+                    color: const Color(0xFF34A853).withOpacity(_glowAnimation.value * 0.1),
+                    blurRadius: 1,
+                    spreadRadius: 0.2,
+                    offset: const Offset(0, 0),
+                  )
+                else if (widget.focusNode.hasFocus)
+                  BoxShadow(
+                    color: const Color(0xFF3B82F6).withOpacity(0.12),
+                    blurRadius: 4,
+                    spreadRadius: 0.3,
+                  )
+                else
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 2,
+                    spreadRadius: 0,
+                  ),
+              ],
+            ),
+            child: Center(
+              child: TextField(
+                controller: widget.controller,
+                focusNode: widget.focusNode,
+                textAlign: TextAlign.center,
+                keyboardType: TextInputType.number,
+                maxLength: 1,
+                onChanged: widget.onChanged,
+                // Handle backspace key with a custom TextInputFormatter
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  _BackspaceTextInputFormatter(
+                    onBackspace: () {
+                      // Always call onBackspace when backspace is pressed
+                      widget.onBackspace();
+                    },
+                  ),
+                ],
+                decoration: const InputDecoration(
+                  counterText: '',
+                  border: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                style: TextStyle(
+                  color: const Color(0xFF1F2937), // Always use dark color for digits, no green
+                  fontSize: boxWidth * 0.8, // Adjusted font size for the rectangular box
+                  fontWeight: FontWeight.w600, // Slightly reduced font weight
+                  fontFamily: 'Inter',
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Add this class at the end of the file
+class _BackspaceTextInputFormatter extends TextInputFormatter {
+  final VoidCallback onBackspace;
+
+  _BackspaceTextInputFormatter({required this.onBackspace});
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Detect backspace press in various scenarios
+    
+    // Case 1: Text was deleted (most common case)
+    if (oldValue.text.isNotEmpty && newValue.text.isEmpty) {
+      onBackspace();
+    } 
+    // Case 2: Selection changed in a way that suggests backspace
+    else if (oldValue.text.isEmpty && newValue.text.isEmpty &&
+             oldValue.selection.baseOffset > newValue.selection.baseOffset) {
+      onBackspace();
+    }
+    // Case 3: Selection position moved backward without text change
+    else if (oldValue.text == newValue.text && 
+             oldValue.selection.baseOffset > newValue.selection.baseOffset) {
+      onBackspace();
+    }
+    
+    return newValue;
   }
 }

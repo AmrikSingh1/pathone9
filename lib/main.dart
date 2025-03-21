@@ -4,6 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'login.dart';
 import 'membership_selection.dart';
 import 'homepage.dart';
+import 'course_viewer.dart';
+import 'test_video_player.dart';
 
 // Add a utility class for responsive design
 class SizeConfig {
@@ -28,17 +30,17 @@ class SizeConfig {
     screenHeight = _mediaQueryData.size.height;
     orientation = _mediaQueryData.orientation;
     textScaleFactor = _mediaQueryData.textScaleFactor;
-    
+
     // Block sizes for responsive calculations
     blockSizeHorizontal = screenWidth / 100;
     blockSizeVertical = screenHeight / 100;
-    
+
     // Safe area values
     _safeAreaHorizontal = _mediaQueryData.padding.left + _mediaQueryData.padding.right;
     _safeAreaVertical = _mediaQueryData.padding.top + _mediaQueryData.padding.bottom;
     safeBlockHorizontal = (screenWidth - _safeAreaHorizontal) / 100;
     safeBlockVertical = (screenHeight - _safeAreaVertical) / 100;
-    
+
     // Screen size categories
     isSmallScreen = screenHeight < 700;
     isMediumScreen = screenHeight >= 700 && screenHeight < 900;
@@ -62,16 +64,16 @@ class ResponsiveBuilder extends StatelessWidget {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  
+
   // Initialize shared preferences
   final prefs = await SharedPreferences.getInstance();
-  
+
   runApp(MyApp(prefs: prefs));
 }
 
 class MyApp extends StatelessWidget {
   final SharedPreferences prefs;
-  
+
   const MyApp({super.key, required this.prefs});
 
   // This widget is the root of your application.
@@ -84,7 +86,7 @@ class MyApp extends StatelessWidget {
         // Apply a global text scale factor to ensure text is readable on all devices
         final mediaQuery = MediaQuery.of(context);
         final constrainedTextScaleFactor = mediaQuery.textScaleFactor.clamp(0.8, 1.2);
-        
+
         return MediaQuery(
           data: mediaQuery.copyWith(
             textScaleFactor: constrainedTextScaleFactor,
@@ -140,12 +142,12 @@ class MyApp extends StatelessWidget {
         final isFirstLaunch = queryParams['isFirstLaunch'] == 'true';
         final isSignUp = queryParams['isSignUp'] == 'true';
         final showLoginContent = queryParams['showLoginContent'] == 'true';
-        
+
         // Save onboarding status when user starts the login process
         if (uri.path == '/login') {
           prefs.setBool('has_started_onboarding', true);
         }
-        
+
         // Handle routes
         switch (uri.path) {
           case '/login':
@@ -167,6 +169,18 @@ class MyApp extends StatelessWidget {
           case '/homepage':
             return MaterialPageRoute(
               builder: (context) => const HomePage(),
+            );
+          case '/course':
+            final args = settings.arguments as Map<String, dynamic>;
+            return MaterialPageRoute(
+              builder: (context) => CourseViewer(
+                courseTitle: args['courseTitle'] as String,
+                membershipPlan: args['membershipPlan'] as int,
+              ),
+            );
+          case '/test_video':
+            return MaterialPageRoute(
+              builder: (context) => const TestVideoPlayerPage(),
             );
           default:
             return MaterialPageRoute(
@@ -196,17 +210,17 @@ class MyApp extends StatelessWidget {
     if (userId != null && hasMembership) {
       return '/homepage';
     }
-    
+
     // If user is logged in but hasn't selected a membership, go to membership selection
     if (userId != null && !hasMembership) {
       return '/membership';
     }
-    
+
     // If user has started onboarding but not completed login, return to login page
     if (hasStartedOnboarding) {
       return '/login?showLoginContent=true';
     }
-    
+
     // Otherwise, show the initial login page with options
     return isFirstLaunch ? '/login?isFirstLaunch=true' : '/login';
   }

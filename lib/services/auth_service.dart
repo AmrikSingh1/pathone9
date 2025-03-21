@@ -17,7 +17,7 @@ class AuthService {
     try {
       // Trigger the authentication flow
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
+
       if (googleUser == null) {
         return null; // User canceled the sign-in flow
       }
@@ -33,14 +33,14 @@ class AuthService {
 
       // Sign in with the credential
       final userCredential = await _auth.signInWithCredential(credential);
-      
+
       // Save user ID to shared preferences
       if (userCredential.user != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_id', userCredential.user!.uid);
         await prefs.setBool('is_first_launch', false);
       }
-      
+
       return userCredential;
     } catch (e) {
       print('Error signing in with Google: $e');
@@ -53,7 +53,7 @@ class AuthService {
     try {
       await _googleSignIn.signOut();
       await _auth.signOut();
-      
+
       // Clear user data from shared preferences
       final prefs = await SharedPreferences.getInstance();
       // Keep is_first_launch as false

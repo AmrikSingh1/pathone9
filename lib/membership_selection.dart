@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui';
 import 'dart:math' as math;
+import 'course_viewer.dart';
 
 class MembershipSelectionPage extends StatefulWidget {
   final String userId;
@@ -19,12 +20,12 @@ class MembershipSelectionPage extends StatefulWidget {
 class _MembershipSelectionPageState extends State<MembershipSelectionPage> with TickerProviderStateMixin {
   int _selectedPlan = -1;
   bool _isProcessing = false;
-  
+
   // Animation controllers - add pulse animation controller
   late AnimationController _cardsAnimController;
   late AnimationController _shineAnimController;
   late AnimationController _pulseAnimController;
-  
+
   // Animations
   late List<Animation<double>> _cardAnims;
   late Animation<double> _shineAnim;
@@ -33,47 +34,47 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
   @override
   void initState() {
     super.initState();
-    
+
     try {
       // Initialize animation controllers
       _cardsAnimController = AnimationController(
         duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-    
+        vsync: this,
+      );
+
       // Add shine animation controller back
       _shineAnimController = AnimationController(
         duration: const Duration(milliseconds: 2000),
         vsync: this,
       )..repeat();
-      
+
       // Add pulse animation controller
       _pulseAnimController = AnimationController(
         duration: const Duration(milliseconds: 1500),
         vsync: this,
       )..repeat(reverse: true);
-      
+
       // Create staggered animations for cards
       _cardAnims = List.generate(3, (index) {
         final delay = 0.2 * index;
         return Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
+          CurvedAnimation(
             parent: _cardsAnimController,
             curve: Interval(delay, delay + 0.6, curve: Curves.easeOutCubic),
           ),
         );
       });
-      
+
       // Add shine animation back
       _shineAnim = Tween<double>(begin: -0.5, end: 1.5).animate(
-        CurvedAnimation(parent: _shineAnimController, curve: Curves.easeInOut)
+          CurvedAnimation(parent: _shineAnimController, curve: Curves.easeInOut)
       );
-      
+
       // Add pulse animation
       _pulseAnim = Tween<double>(begin: 1.0, end: 1.03).animate(
-        CurvedAnimation(parent: _pulseAnimController, curve: Curves.easeInOut)
+          CurvedAnimation(parent: _pulseAnimController, curve: Curves.easeInOut)
       );
-      
+
       // Start animations
       _cardsAnimController.forward();
     } catch (e) {
@@ -98,7 +99,7 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
       if (_pulseAnimController.isAnimating) {
         _pulseAnimController.stop();
       }
-      
+
       _cardsAnimController.dispose();
       _shineAnimController.dispose();
       _pulseAnimController.dispose();
@@ -118,25 +119,46 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
       );
       return;
     }
-    
+
     setState(() {
       _isProcessing = true;
     });
-    
+
     try {
       // Stop animations to prevent rendering issues during navigation
       _stopAllAnimations();
-      
+
       // Save membership selection to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('membership_plan', _selectedPlan);
       await prefs.setBool('has_membership', true);
-      
-      // Navigate to homepage after a short delay to show the processing state
+
+      // Get course title based on selected plan
+      String courseTitle = '';
+      switch (_selectedPlan) {
+        case 0:
+          courseTitle = 'Basic Course';
+          break;
+        case 1:
+          courseTitle = 'Mega Course';
+          break;
+        case 2:
+          courseTitle = 'Excellence Course';
+          break;
+      }
+
+      // Navigate to course viewer after a short delay to show the processing state
       if (mounted) {
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
-            Navigator.pushReplacementNamed(context, '/homepage');
+            Navigator.pushReplacementNamed(
+              context,
+              '/course',
+              arguments: {
+                'courseTitle': courseTitle,
+                'membershipPlan': _selectedPlan,
+              },
+            );
           }
         });
       }
@@ -146,7 +168,7 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
         setState(() {
           _isProcessing = false;
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error selecting membership: $e'),
@@ -180,8 +202,8 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
       final screenSize = MediaQuery.of(context).size;
       final screenWidth = screenSize.width;
       final screenHeight = screenSize.height;
-      
-    return Scaffold(
+
+      return Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         extendBodyBehindAppBar: true,
         appBar: AppBar(
@@ -204,12 +226,12 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
         ),
         body: Stack(
           clipBehavior: Clip.none,
-            children: [
+          children: [
             // Simple solid background instead of animated background
-              Container(
+            Container(
               color: const Color(0xFFF8FAFC),
             ),
-            
+
             // Main content
             SafeArea(
               child: Padding(
@@ -218,7 +240,7 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 16),
-                    
+
                     // Header text with gradient
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
@@ -238,9 +260,9 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    
+
                     const SizedBox(height: 8),
-                    
+
                     // Subheader
                     Text(
                       'Select the membership that fits your journey',
@@ -253,9 +275,9 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    
+
                     const SizedBox(height: 24),
-                    
+
                     // Membership cards
                     Expanded(
                       child: ScrollConfiguration(
@@ -284,9 +306,9 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                               glowColor: const Color(0xFF475569), // Darker glow color
                               isPopular: false,
                             ),
-                            
+
                             const SizedBox(height: 20),
-                            
+
                             // Premium Membership Card
                             _buildMembershipCard(
                               index: 1,
@@ -308,9 +330,9 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                               isPopular: true,
                               popularLabel: 'POPULAR',
                             ),
-                            
+
                             const SizedBox(height: 20),
-                            
+
                             // Ultimate Membership Card
                             _buildMembershipCard(
                               index: 2,
@@ -332,13 +354,13 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                               isPopular: false,
                               isElite: true,
                             ),
-                            
+
                             const SizedBox(height: 16),
                           ],
                         ),
                       ),
                     ),
-                    
+
                     // Select button
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -393,7 +415,7 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
       );
     }
   }
-  
+
   Widget _buildMembershipCard({
     required int index,
     required String title,
@@ -411,20 +433,20 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
       debugPrint('Invalid card index: $index');
       return const SizedBox.shrink(); // Return empty widget instead of crashing
     }
-    
+
     return AnimatedBuilder(
       animation: _cardAnims[index],
       builder: (context, child) {
         // Safely handle animation value
         final animValue = _cardAnims[index].value;
-        
+
         return Transform.translate(
           offset: Offset(0, 50 * (1 - animValue)),
           child: Opacity(
             opacity: animValue,
             child: GestureDetector(
-                      onTap: () {
-                        setState(() {
+              onTap: () {
+                setState(() {
                   _selectedPlan = index;
                 });
                 HapticFeedback.lightImpact();
@@ -434,21 +456,21 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                 builder: (context, child) {
                   // Apply pulse animation only to the selected card
                   final scale = _selectedPlan == index ? _pulseAnim.value : 1.0;
-                  
+
                   return Transform.scale(
                     scale: scale,
-                      child: Container(
+                    child: Container(
                       margin: const EdgeInsets.symmetric(horizontal: 4),
                       child: Stack(
                         children: [
                           // Card with simplified effect
                           Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                                  color: _selectedPlan == index 
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _selectedPlan == index
                                       ? glowColor.withOpacity(0.5)
                                       : glowColor.withOpacity(0.3),
                                   blurRadius: _selectedPlan == index ? 15 : 10,
@@ -464,13 +486,13 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                               ),
                             ),
                             padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 // Title row with badge if applicable
                                 Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
                                     // Title with gradient
                                     ShaderMask(
                                       shaderCallback: (bounds) => LinearGradient(
@@ -482,14 +504,14 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                                         title,
                                         style: const TextStyle(
                                           fontFamily: 'Inter',
-                                              fontWeight: FontWeight.bold,
-                                                  fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 24,
                                           color: Colors.white,
                                           letterSpacing: 0.5,
                                         ),
                                       ),
                                     ),
-                                    
+
                                     // Badge for popular or elite
                                     if (isPopular)
                                       _buildBadge(
@@ -500,9 +522,9 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                                       _buildEliteBadge(),
                                   ],
                                 ),
-                                
+
                                 const SizedBox(height: 16),
-                                
+
                                 // Price
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -526,19 +548,19 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                                           fontWeight: FontWeight.w400,
                                           fontSize: 14,
                                           color: Color(0xFF64748B),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                              ],
-                            ),
-                            
+                                  ],
+                                ),
+
                                 const SizedBox(height: 24),
-                                
+
                                 // Features list
                                 ...features.map((feature) => Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
                                   child: Row(
-                                children: [
+                                    children: [
                                       // Checkmark icon with gradient
                                       Container(
                                         width: 20,
@@ -558,27 +580,27 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                                             size: 12,
                                           ),
                                         ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
                                           feature,
                                           style: TextStyle(
-                                                fontFamily: 'Inter',
+                                            fontFamily: 'Inter',
                                             fontWeight: FontWeight.w400,
                                             fontSize: 15,
                                             color: Color(0xFF334155),
                                             letterSpacing: 0.2,
-                                              ),
-                                            ),
                                           ),
-                                        ],
+                                        ),
                                       ),
+                                    ],
+                                  ),
                                 )),
                               ],
                             ),
                           ),
-                          
+
                           // Shine effect for Ultimate tier
                           if (isElite)
                             Positioned.fill(
@@ -595,19 +617,19 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                        ],
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
+            ),
           ),
         );
       },
     );
   }
-  
+
   Widget _buildBadge({required String label, required List<Color> colors}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -638,15 +660,15 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
       ),
     );
   }
-  
+
   Widget _buildEliteBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
           colors: [Color(0xFF6B46C1), Color(0xFFD946EF)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
@@ -680,13 +702,13 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
       ),
     );
   }
-  
+
   Widget _buildSelectButton() {
     try {
       // Define gradient colors based on selected plan
       List<Color> buttonGradient;
       Color shadowColor;
-      
+
       if (_selectedPlan == 0) {
         // Free plan colors - updated to match darker colors
         buttonGradient = const [Color(0xFF64748B), Color(0xFF94A3B8)];
@@ -704,7 +726,7 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
         buttonGradient = const [Color(0xFF3B82F6), Color(0xFF00E5FF)];
         shadowColor = const Color(0xFF3B82F6);
       }
-      
+
       return Container(
         height: 56,
         decoration: BoxDecoration(
@@ -716,58 +738,58 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
+          boxShadow: [
+            BoxShadow(
               color: shadowColor.withOpacity(_selectedPlan == -1 ? 0.2 : 0.4),
-                        blurRadius: 15,
-                        spreadRadius: 1,
+              blurRadius: 15,
+              spreadRadius: 1,
               offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton(
+            ),
+          ],
+        ),
+        child: ElevatedButton(
           onPressed: _isProcessing ? null : _selectMembership,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: EdgeInsets.zero,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: EdgeInsets.zero,
             elevation: 0,
           ),
           child: _isProcessing
               ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 2,
+            ),
+          )
               : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                        Text(
-                      'Select Membership',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                    SizedBox(width: 8),
-                    Icon(
-                          Icons.arrow_forward,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ],
-                    ),
-                  ),
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Text(
+                'Select Membership',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward,
+                color: Colors.white,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
       );
     } catch (e) {
       debugPrint('Error building select button: $e');
@@ -784,13 +806,13 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
         ),
         child: _isProcessing
             ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            color: Colors.white,
+            strokeWidth: 2,
+          ),
+        )
             : const Text('Select Membership'),
       );
     }
@@ -800,7 +822,7 @@ class _MembershipSelectionPageState extends State<MembershipSelectionPage> with 
 // Custom scroll behavior for bouncing effect
 class BouncingScrollBehavior extends ScrollBehavior {
   const BouncingScrollBehavior();
-  
+
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) {
     return const BouncingScrollPhysics();
@@ -811,24 +833,24 @@ class BouncingScrollBehavior extends ScrollBehavior {
 class SimplifiedShineEffect extends StatelessWidget {
   final double position;
   final Color color;
-  
+
   const SimplifiedShineEffect({
     Key? key,
     required this.position,
     required this.color,
   }) : super(key: key);
-  
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
-        
+
         // Calculate position of the shine
         final shineWidth = width * 0.4;
         final left = width * position - shineWidth;
-        
+
         return Stack(
           children: [
             Positioned(
@@ -847,9 +869,9 @@ class SimplifiedShineEffect extends StatelessWidget {
                       color.withOpacity(0.0),
                     ],
                     stops: const [0.0, 0.5, 1.0],
-          ),
-        ),
-      ),
+                  ),
+                ),
+              ),
             ),
           ],
         );
