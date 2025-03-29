@@ -20,12 +20,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   // Animation for "Start" button
   late AnimationController _startButtonAnimController;
   late Animation<double> _startButtonScaleAnimation;
+  
+  // Shimmer animation for Start button
+  late AnimationController _shimmerController;
+  late Animation<double> _shimmerAnimation;
 
   // List of all animation files with their respective titles and descriptions
   final List<Map<String, dynamic>> _onboardingData = [
     {
       'animation': 'assets/animations/start.json',
-      'title': 'Start Your Journey',
+      'title': 'Start Your Career Journey',
       'description': 'Begin your career exploration with our AI-powered guidance system'
     },
     {
@@ -45,12 +49,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     },
     {
       'animation': 'assets/animations/module_by_module_courses.json',
-      'title': 'Learn Step by Step',
+      'title': 'Module by Module Courses',
       'description': 'Access comprehensive courses broken down into easy-to-follow modules'
     },
     {
       'animation': 'assets/animations/24:7_ai_powered_customer_support.json',
-      'title': 'Get 24/7 Support',
+      'title': 'Get 24/7 Ai Support',
       'description': 'Our AI-powered support system is always ready to assist with your career questions'
     },
   ];
@@ -80,12 +84,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     
     // Start the pulsating animation for the start button
     _startButtonAnimController.repeat();
+
+    // Initialize shimmer animation controller
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    
+    _shimmerAnimation = Tween<double>(begin: -0.5, end: 1.5).animate(_shimmerController);
+    
+    // Start the shimmer animation
+    _shimmerController.repeat();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
     _startButtonAnimController.dispose();
+    _shimmerController.dispose();
     super.dispose();
   }
 
@@ -280,69 +296,159 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
             ),
           ),
           
-          // Next or Start button
+          // Next or Start button - redesigned to be more sleek and elegant
           _isLastPage
               ? ScaleTransition(
                   scale: _startButtonScaleAnimation,
-                  child: ElevatedButton(
+                  child: _buildElegantButton(
+                    label: 'Start',
+                    icon: Icons.arrow_forward,
                     onPressed: _completeOnboarding,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3B82F6),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 4,
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Start',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(width: 4),
-                        Icon(Icons.arrow_forward, size: 20)
-                      ],
-                    ),
+                    isHighlighted: true,
                   ),
                 )
-              : ElevatedButton(
+              : _buildElegantButton(
+                  label: 'Next',
+                  icon: Icons.arrow_forward,
                   onPressed: _goToNextPage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3B82F6),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Next',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(Icons.arrow_forward, size: 20)
-                    ],
-                  ),
+                  isHighlighted: false,
                 ),
         ],
+      ),
+    );
+  }
+  
+  // New elegant button widget
+  Widget _buildElegantButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+    required bool isHighlighted,
+  }) {
+    // Use shimmer animation for the Start button
+    if (isHighlighted) {
+      return AnimatedBuilder(
+        animation: _shimmerAnimation,
+        builder: (context, child) {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onPressed,
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              hoverColor: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF3B82F6),
+                      const Color(0xFF00E5FF),
+                      const Color(0xFF3B82F6),
+                    ],
+                    stops: [
+                      _shimmerAnimation.value - 0.3,
+                      _shimmerAnimation.value,
+                      _shimmerAnimation.value + 0.3,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF3B82F6).withOpacity(0.25),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                      spreadRadius: 0,
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 0.5,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(
+                      Icons.arrow_forward,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+    
+    // Regular Next button (no shimmer)
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        hoverColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF3B82F6).withOpacity(0.85),
+                const Color(0xFF00E5FF).withOpacity(0.85),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF3B82F6).withOpacity(0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+                spreadRadius: 0,
+              ),
+            ],
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.7,
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.arrow_forward,
+                color: Colors.white,
+                size: 14,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
