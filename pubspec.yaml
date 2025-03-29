@@ -43,6 +43,7 @@ dependencies:
   youtube_player_flutter: ^9.0.4
   video_player: ^2.9.3
   chewie: ^1.11.0
+  lottie: ^3.3.1
 
 dev_dependencies:
   flutter_test:
@@ -74,6 +75,7 @@ flutter:
     - assets/images/google_icon.png
     - assets/images/facebook_icon.png
     - assets/images/apple_icon.png
+    - assets/animations/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
