@@ -24,7 +24,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   // List of all animation files with their respective titles and descriptions
   final List<Map<String, dynamic>> _onboardingData = [
     {
-      'animation': 'assets/animations/start.json',
+      'animation': 'assets/animations/fixed_start.json',
       'title': 'Start Your Journey',
       'description': 'Begin your career exploration with our AI-powered guidance system'
     },
@@ -39,7 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
       'description': 'Complete interactive assessments designed to match your abilities with ideal careers'
     },
     {
-      'animation': 'assets/animations/searching_career.json',
+      'animation': 'assets/animations/fixed_searching_career.json',
       'title': 'Find Your Passion',
       'description': 'Our advanced AI analyzes your unique profile to suggest the perfect career matches'
     },
@@ -205,6 +205,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
               data['animation'],
               fit: BoxFit.contain,
               animate: true,
+              errorBuilder: (context, error, stackTrace) {
+                // Show a fallback when animation fails to load
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.image_not_supported_rounded,
+                        size: 80,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Animation could not be loaded',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
           
