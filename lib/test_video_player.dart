@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import 'package:lottie/lottie.dart';
 
 class TestVideoPlayerPage extends StatefulWidget {
   const TestVideoPlayerPage({super.key});
@@ -11,13 +10,11 @@ class TestVideoPlayerPage extends StatefulWidget {
 }
 
 class _TestVideoPlayerPageState extends State<TestVideoPlayerPage> {
-  VideoPlayerController? _videoPlayerController;
+  late VideoPlayerController _videoPlayerController;
   ChewieController? _chewieController;
   bool _isLoading = true;
   bool _isBuffering = false;
-  bool _hasError = false;
-  String _errorMsg = '';
-
+  
   @override
   void initState() {
     super.initState();
@@ -27,85 +24,89 @@ class _TestVideoPlayerPageState extends State<TestVideoPlayerPage> {
   Future<void> _initializePlayer() async {
     setState(() {
       _isLoading = true;
-      _hasError = false;
-      _errorMsg = '';
-      _chewieController = null;
+      // Dispose existing controllers if they exist
+      _chewieController?.dispose();
+      _videoPlayerController.dispose();
     });
-
+    
+    _videoPlayerController = VideoPlayerController.networkUrl(
+      Uri.parse('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'),
+    );
+    
+    // Add listener for buffering state
+    _videoPlayerController.addListener(_checkBuffering);
+    
     try {
-      // Sample video URL - replace with your own
-      _videoPlayerController = VideoPlayerController.networkUrl(
-        Uri.parse('https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4'),
-      );
-
-      await _videoPlayerController!.initialize();
+      await _videoPlayerController.initialize();
       
-      // Add listener for buffering state
-      _videoPlayerController!.addListener(_checkBuffering);
-
       _chewieController = ChewieController(
-        videoPlayerController: _videoPlayerController!,
+        videoPlayerController: _videoPlayerController,
+        aspectRatio: 16 / 9,
         autoPlay: true,
-        looping: true,
-        showControls: true,
+        looping: false,
         showOptions: false,
-        aspectRatio: _videoPlayerController!.value.aspectRatio,
+        placeholder: Container(
+          color: Colors.black,
+          child: const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+            ),
+          ),
+        ),
+        materialProgressColors: ChewieProgressColors(
+          playedColor: Colors.blue,
+          handleColor: Colors.cyan,
+          backgroundColor: Colors.grey.shade300,
+          bufferedColor: Colors.grey.shade500,
+        ),
         errorBuilder: (context, errorMessage) {
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error, color: Colors.red, size: 36),
-                const SizedBox(height: 8),
-                Text(
-                  'Error: $errorMessage',
-                  style: const TextStyle(color: Colors.red),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _initializePlayer,
-                  child: const Text('Reload Video'),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    errorMessage,
+                    style: const TextStyle(color: Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           );
         },
       );
       
-      _chewieController!.play();
+      setState(() {
+        _isLoading = false;
+      });
       
-      setState(() {
-        _isLoading = false;
-      });
+      // Start playback to trigger buffering states
+      _videoPlayerController.play();
     } catch (e) {
+      debugPrint('Error initializing video: $e');
       setState(() {
         _isLoading = false;
-        _hasError = true;
-        _errorMsg = e.toString();
       });
-      print('Error initializing video player: $e');
     }
   }
-
+  
   void _checkBuffering() {
-    if (_videoPlayerController != null) {
-      final isBuffering = _videoPlayerController!.value.isBuffering;
-      
-      // Only update state if there's a change in buffering state
-      if (isBuffering != _isBuffering) {
-        setState(() {
-          _isBuffering = isBuffering;
-        });
-      }
+    final newBufferingState = _videoPlayerController.value.isBuffering;
+    if (_isBuffering != newBufferingState) {
+      setState(() {
+        _isBuffering = newBufferingState;
+      });
     }
   }
 
   @override
   void dispose() {
-    if (_videoPlayerController != null) {
-      _videoPlayerController!.removeListener(_checkBuffering);
-      _videoPlayerController!.dispose();
-    }
+    _videoPlayerController.removeListener(_checkBuffering);
+    _videoPlayerController.dispose();
     _chewieController?.dispose();
     super.dispose();
   }
@@ -114,170 +115,68 @@ class _TestVideoPlayerPageState extends State<TestVideoPlayerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Test Video Player'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _initializePlayer,
-          )
-        ],
+        title: const Text('Video Player Test'),
       ),
       body: Column(
         children: [
-          // Animation test section
-          Container(
-            height: 200,
-            width: double.infinity,
-            color: Colors.grey[200],
-            child: Lottie.asset(
-              'assets/animations/start.json',
-              fit: BoxFit.contain,
-              animate: true,
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Video player section
           Expanded(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Show error message if there's an error
-                if (_hasError)
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error, color: Colors.red, size: 36),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Error: $_errorMsg',
-                          style: const TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _initializePlayer,
-                          child: const Text('Reload Video'),
-                        ),
-                      ],
-                    ),
-                  )
-                // Show the video player if initialized
-                else if (_chewieController != null)
-                  Chewie(controller: _chewieController!),
-                
-                // Show loading indicator while loading
-                if (_isLoading)
-                  const CircularProgressIndicator(),
-                
-                // Show buffering indicator when buffering
-                if (_isBuffering && !_isLoading)
-                  const CircularProgressIndicator(),
-              ],
+            child: Center(
+              child: _isLoading 
+                  ? const CircularProgressIndicator()
+                  : _chewieController != null && _videoPlayerController.value.isInitialized
+                      ? _buildVideoPlayer()
+                      : const Text('Failed to load video'),
             ),
           ),
-          
-          // Debugging info
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey[200],
+          Padding(
+            padding: const EdgeInsets.all(16.0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Video state: ${_isLoading ? "Loading" : _isBuffering ? "Buffering" : "Playing"}'),
-                if (_videoPlayerController != null)
-                  Text('Position: ${_videoPlayerController!.value.position.toString().split('.').first}'),
-                if (_videoPlayerController != null)
-                  Text('Duration: ${_videoPlayerController!.value.duration.toString().split('.').first}'),
-                Text('Buffering: $_isBuffering'),
-                Text('Has error: $_hasError'),
-                
-                // Display buttons to test other animations
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => _AnimationTestPage(
-                                animationPath: 'assets/animations/ai_tests.json',
-                                title: 'AI Tests',
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('AI Tests'),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => _AnimationTestPage(
-                                animationPath: 'assets/animations/searching_career.json',
-                                title: 'Career Search',
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('Career Search'),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => _AnimationTestPage(
-                                animationPath: 'assets/animations/thinking_about_career.json',
-                                title: 'Career Thinking',
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('Career Thinking'),
-                      ),
-                    ],
-                  ),
+                Text(
+                  'Status: ${_videoPlayerController.value.isPlaying ? "Playing" : "Paused"}',
+                ),
+                Text(
+                  'Buffering: ${_videoPlayerController.value.isBuffering ? "Yes" : "No"}',
+                ),
+                Text(
+                  'Position: ${_videoPlayerController.value.position.inSeconds}s / ${_videoPlayerController.value.duration.inSeconds}s',
                 ),
               ],
             ),
           ),
+          ElevatedButton(
+            onPressed: _isLoading ? null : _initializePlayer,
+            child: const Text('Reload Video'),
+          ),
+          const SizedBox(height: 16),
+          if (_videoPlayerController.value.hasError)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                'Error: ${_videoPlayerController.value.errorDescription}',
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
         ],
       ),
     );
   }
-}
-
-class _AnimationTestPage extends StatelessWidget {
-  final String animationPath;
-  final String title;
-
-  const _AnimationTestPage({
-    required this.animationPath,
-    required this.title,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Animation: $title'),
-      ),
-      body: Center(
-        child: Lottie.asset(
-          animationPath,
-          fit: BoxFit.contain,
-          animate: true,
+  
+  Widget _buildVideoPlayer() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Chewie(controller: _chewieController!),
         ),
-      ),
+        
+        // Overlay a buffering indicator only when the video is actually buffering
+        if (_isBuffering)
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          ),
+      ],
     );
   }
 } 

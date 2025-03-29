@@ -6,6 +6,7 @@ import 'membership_selection.dart';
 import 'homepage.dart';
 import 'course_viewer.dart';
 import 'test_video_player.dart';
+import 'onboarding.dart';
 
 // Add a utility class for responsive design
 class SizeConfig {
@@ -158,6 +159,10 @@ class MyApp extends StatelessWidget {
                 showLoginContent: showLoginContent,
               ),
             );
+          case '/onboarding':
+            return MaterialPageRoute(
+              builder: (context) => const OnboardingScreen(),
+            );
           case '/membership':
             return MaterialPageRoute(
               builder: (context) => MembershipSelectionPage(
@@ -221,8 +226,8 @@ class MyApp extends StatelessWidget {
       return '/login?showLoginContent=true';
     }
 
-    // Otherwise, show the initial login page with options
-    return isFirstLaunch ? '/login?isFirstLaunch=true' : '/login';
+    // Otherwise, show the onboarding screen on first launch
+    return isFirstLaunch ? '/onboarding' : '/login';
   }
 }
 
