@@ -14,9 +14,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   final PageController _pageController = PageController();
   int _currentPage = 0;
   bool _isLastPage = false;
-  late AnimationController _slideAnimController;
-  late Animation<Offset> _slideAnimation;
-
+  bool _isAnimating = false;
+  double _dragOffset = 0.0;
+  
   // Animation for "Start" button
   late AnimationController _startButtonAnimController;
   late Animation<double> _startButtonScaleAnimation;
@@ -24,7 +24,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   // List of all animation files with their respective titles and descriptions
   final List<Map<String, dynamic>> _onboardingData = [
     {
-      'animation': 'assets/animations/fixed_start.json',
+      'animation': 'assets/animations/start.json',
       'title': 'Start Your Journey',
       'description': 'Begin your career exploration with our AI-powered guidance system'
     },
@@ -39,7 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
       'description': 'Complete interactive assessments designed to match your abilities with ideal careers'
     },
     {
-      'animation': 'assets/animations/fixed_searching_career.json',
+      'animation': 'assets/animations/searching_career.json',
       'title': 'Find Your Passion',
       'description': 'Our advanced AI analyzes your unique profile to suggest the perfect career matches'
     },
@@ -58,20 +58,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   @override
   void initState() {
     super.initState();
-    
-    // Initialize slide animation controller
-    _slideAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0),
-      end: const Offset(-1.0, 0),
-    ).animate(CurvedAnimation(
-      parent: _slideAnimController,
-      curve: Curves.easeInOut,
-    ));
     
     // Initialize start button animation controller
     _startButtonAnimController = AnimationController(
@@ -99,7 +85,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   @override
   void dispose() {
     _pageController.dispose();
-    _slideAnimController.dispose();
     _startButtonAnimController.dispose();
     super.dispose();
   }
@@ -112,24 +97,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   }
 
   void _skipToEnd() {
-    _slideAnimController.forward().then((_) {
-      _pageController.animateToPage(
-        _onboardingData.length - 1,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
-      _slideAnimController.reset();
+    setState(() {
+      _isAnimating = true;
+    });
+    
+    _pageController.animateToPage(
+      _onboardingData.length - 1,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+    ).then((_) {
+      setState(() {
+        _isAnimating = false;
+      });
     });
   }
 
   void _goToNextPage() {
     if (_currentPage < _onboardingData.length - 1) {
-      _slideAnimController.forward().then((_) {
-        _pageController.nextPage(
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        );
-        _slideAnimController.reset();
+      setState(() {
+        _isAnimating = true;
+      });
+      
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      ).then((_) {
+        setState(() {
+          _isAnimating = false;
+        });
       });
     }
   }
@@ -169,17 +164,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
               child: PageView.builder(
                 controller: _pageController,
                 onPageChanged: _onPageChanged,
+                physics: const BouncingScrollPhysics(),
                 itemCount: _onboardingData.length,
                 itemBuilder: (context, index) {
-                  return AnimatedBuilder(
-                    animation: _slideAnimController,
-                    builder: (context, child) {
-                      return SlideTransition(
-                        position: _slideAnimation,
-                        child: _buildOnboardingPage(index),
-                      );
-                    },
-                  );
+                  return _buildOnboardingPage(index);
                 },
               ),
             ),
@@ -193,79 +181,61 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   Widget _buildOnboardingPage(int index) {
     final data = _onboardingData[index];
     
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Animation
-          Expanded(
-            flex: 5,
-            child: Lottie.asset(
-              data['animation'],
-              fit: BoxFit.contain,
-              animate: true,
-              errorBuilder: (context, error, stackTrace) {
-                // Show a fallback when animation fails to load
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported_rounded,
-                        size: 80,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Animation could not be loaded',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 16,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                );
-              },
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Animation
+            Expanded(
+              flex: 5,
+              child: Lottie.asset(
+                data['animation'],
+                fit: BoxFit.contain,
+                animate: true,
+                frameRate: FrameRate.max,
+                options: LottieOptions(
+                  enableMergePaths: true,
+                ),
+              ),
             ),
-          ),
-          
-          // Title with gradient
-          ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [Color(0xFF3B82F6), Color(0xFF00E5FF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ).createShader(bounds),
-            child: Text(
-              data['title'],
+            
+            // Title with gradient
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Color(0xFF3B82F6), Color(0xFF00E5FF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ).createShader(bounds),
+              child: Text(
+                data['title'],
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Description
+            Text(
+              data['description'],
               style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 0.5,
+                fontSize: 16,
+                color: Color(0xFF64748B),
+                height: 1.4,
               ),
               textAlign: TextAlign.center,
             ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Description
-          Text(
-            data['description'],
-            style: const TextStyle(
-              fontSize: 16,
-              color: Color(0xFF64748B),
-              height: 1.4,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          
-          const SizedBox(height: 32),
-        ],
+            
+            const SizedBox(height: 32),
+          ],
+        ),
       ),
     );
   }
